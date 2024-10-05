@@ -1,3 +1,12 @@
+# RISC-V Simulator
+## Steps to run tests
+0. Get Rust toolchain and make sure you could compile Rust codes with `cargo`.
+1. Clone the repository: `git clone https://github.com/xuehaonan27/riscv-emulator`.
+2. Enter the directory: `cd riscv-emulator`.
+3. Run `make run` to run all tests.
+4. Run `make T=<test_name>` to run a single test.
+5. Run `make M=debug T=<test_name>` to run a single test with debugger.
+
 ## Benches
 ### Dhrystone
 Compilation flags: -Wall -march=rv64ifd -std=c90
