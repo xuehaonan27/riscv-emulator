@@ -22,7 +22,7 @@ struct DebugArgs {
 #[derive(Subcommand, Debug)]
 enum Commands {
     #[clap(alias = "help")]
-    Helping,
+    H,
     #[clap(alias = "c")]
     Continue,
     #[clap(alias = "q")]
@@ -65,7 +65,7 @@ impl REDB {
                 continue;
             }
             match cmd.unwrap() {
-                Commands::Helping => print_help_info(),
+                Commands::H => print_help_info(),
                 Commands::Continue => match cpu.cpu_exec(None) {
                     Ok(_) => {
                         println!("REDB: CPU executed to end.");

@@ -24,6 +24,7 @@ impl VirtualMemory {
         }
     }
 
+    #[allow(unused)]
     pub fn clear(&mut self) {
         self.mm.clear();
     }

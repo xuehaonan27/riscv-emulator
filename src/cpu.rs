@@ -97,6 +97,7 @@ impl<'a> CPU<'a> {
     }
 
     /// Simulate 5-stage in-order CPU
+    #[allow(unused)]
     pub fn exec_microarchitecture(&mut self) -> Result<()> {
         // Fetch
 
@@ -124,12 +125,14 @@ impl<'a> CPU<'a> {
         let reg_file = &mut self.reg_file;
         let src1 = reg_file.read(exec_itrnl.rs1);
         let src2 = reg_file.read(exec_itrnl.rs2);
-        let src3 = reg_file.read(exec_itrnl.rs3);
+        #[allow(unused)]
+        let src3 = reg_file.read(exec_itrnl.rs3); // TODO: float instructions
         let imm = exec_itrnl.imm;
 
         let rs1 = exec_itrnl.rs1;
         let rs2 = exec_itrnl.rs2;
-        let rs3 = exec_itrnl.rs3;
+        #[allow(unused)]
+        let rs3 = exec_itrnl.rs3; // TODO: float instructions
         let rd = exec_itrnl.rd;
 
         // Calculation

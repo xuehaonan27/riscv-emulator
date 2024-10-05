@@ -5,7 +5,6 @@ use cpu::CPU;
 use debug::REDB;
 use elf::read_elf;
 use log::info;
-use reg::RegisterFile;
 use vm::VirtualMemory;
 
 mod alu;

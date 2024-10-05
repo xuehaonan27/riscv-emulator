@@ -1,10 +1,18 @@
 //! Decode phase
-use crate::{
-    error::{Error, Result},
-    insts::*,
-};
-use log::{debug, error};
+use crate::error::{Error, Result};
+use crate::insts::*;
+use log::error;
 
+/// Decode phase.
+/// ```
+/// R:  OP_IMM_32  AMO  OP  OP_32  OP_FP
+/// R4: MADD  MSUB  NMSUB  NMADD
+/// I:  LOAD  LOAD_FP  MISC_MEM  OP_IMM  JALR  SYSTEM
+/// U:  AUIPC  LUI
+/// UJ: JAL
+/// S:  STORE STORE_FP
+/// SB: BRANCH
+/// ```
 pub fn decode(inst: u32) -> Result<ExecInternal> {
     use crate::insts::inst_64_opcode::*;
     // Format
@@ -35,26 +43,13 @@ pub fn decode(inst: u32) -> Result<ExecInternal> {
         _ => todo!(),
     };
 
-    if let Ok(ref ex_inst) = ex_inst {
+    if let Ok(ref _ex_inst) = ex_inst {
         // debug!("DECODE: {:?}", ex_inst.inst);
     } else {
         error!("ERROR DECODING: {:#x}", inst);
     }
 
     ex_inst
-
-    /*
-    let format = match opcode {
-        OP_IMM_32 | AMO | OP | OP_32 | OP_FP => Inst32Format::R,
-        MADD | MSUB | NMSUB | NMADD => Inst32Format::R4,
-        LOAD | LOAD_FP | MISC_MEM | OP_IMM | JALR | SYSTEM => Inst32Format::I,
-        AUIPC | LUI => Inst32Format::U,
-        JAL => Inst32Format::UJ,
-        STORE | STORE_FP => Inst32Format::S,
-        BRANCH => Inst32Format::SB,
-        _ => return Err(Error::Decode(format!("Unknown opcode {opcode}"))),
-    };
-    */
 }
 
 /// 0000011 LOAD: I type

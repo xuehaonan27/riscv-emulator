@@ -1,7 +1,7 @@
 use std::{fs, ops::Range, path::PathBuf};
 
 use goblin::elf::{header, program_header, Elf};
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 
 use crate::error::{Error, Result};
 
@@ -13,8 +13,6 @@ pub struct LoadElfInfo {
     file_ranges: Vec<Range<usize>>,
     min_vaddr: usize,
     max_vaddr: usize,
-    min_offset: usize,
-    max_offset: usize,
 }
 
 impl LoadElfInfo {
@@ -176,8 +174,6 @@ pub fn read_elf(path: &PathBuf) -> Result<LoadElfInfo> {
         file_ranges,
         min_vaddr,
         max_vaddr,
-        min_offset,
-        max_offset,
     };
     Ok(info)
 }
