@@ -474,7 +474,8 @@ impl<'a> CPU<'a> {
                 // S M[x[rs1] + sext(offset)] = x[rs2][15:0]
                 trace!("{}", pinst!(pc, sh, rs2, imm(rs1)));
                 let vaddr = src1.wrapping_add(sext(imm, S_TYPE_IMM_BITWIDTH) as u64);
-                self.vm.mwrite::<u16>(vaddr as usize, trunc_to_16_bit(src2) as u16);
+                self.vm
+                    .mwrite::<u16>(vaddr as usize, trunc_to_16_bit(src2) as u16);
             }
             Inst64::sll => {
                 // R x[rd] = x[rs1] << x[rs2]
@@ -620,7 +621,10 @@ impl<'a> CPU<'a> {
                 if !legal {
                     return Err(Error::Exception(Exception::IllegalInstruction));
                 }
-                let result = sext(trunc_to_32_bit(t_src1.wrapping_shr(shamt as u32)), WORD_BITWIDTH);
+                let result = sext(
+                    trunc_to_32_bit(t_src1.wrapping_shr(shamt as u32)),
+                    WORD_BITWIDTH,
+                );
                 reg_file.write(rd, result as u64);
             }
             Inst64::srlw => {
@@ -784,6 +788,10 @@ impl<'a> CPU<'a> {
 }
 
 impl<'a> CPU<'a> {
+    pub fn pc(&self) -> u64 {
+        self.pc.read()
+    }
+
     pub fn reg_val_by_name(&self, name: &str) -> Result<u64> {
         let idx = match name {
             "zero" | "x0" => 0,
@@ -815,13 +823,56 @@ impl<'a> CPU<'a> {
             "s10" | "x26" => 26,
             "s11" | "x27" => 27,
             "t3" | "x28" => 28,
-            "t4" | "29" => 29,
-            "t5" | "30" => 30,
-            "t6" | "31" => 31,
+            "t4" | "x29" => 29,
+            "t5" | "x30" => 30,
+            "t6" | "x31" => 31,
+            "pc" => return Ok(self.pc()),
             _ => return Err(Error::InvalidRegName(name.into())),
         };
         Ok(self.reg_file.read(idx))
     }
+}
+
+pub fn reg_name_by_id(idx: u8) -> Result<&'static str> {
+    Ok(match idx {
+        0 => "zero",
+        1 => "ra",
+        2 => "sp",
+        3 => "gp",
+        4 => "tp",
+        5 => "t0",
+        6 => "t1",
+        7 => "t2",
+        8 => "s0",
+        9 => "s1",
+        10 => "a0",
+        11 => "a1",
+        12 => "a2",
+        13 => "a3",
+        14 => "a4",
+        15 => "a5",
+        16 => "a6",
+        17 => "a7",
+        18 => "s2",
+        19 => "s3",
+        20 => "s4",
+        21 => "s5",
+        22 => "s6",
+        23 => "s7",
+        24 => "s8",
+        25 => "s9",
+        26 => "s10",
+        27 => "s11",
+        28 => "t3",
+        29 => "t4",
+        30 => "t5",
+        31 => "t6",
+        _ => {
+            return Err(Error::InvalidRegName(
+                "Register idx must between 0 and 31(including)".into(),
+            ))
+        }
+    })
 }
 
 #[cfg(test)]

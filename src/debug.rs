@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::io::{self, BufRead, Write};
 
-use crate::cpu::CPU;
+use crate::cpu::{reg_name_by_id, CPU};
 use crate::error::{Error, Result};
 
 const REDB_BUF_SIZE: usize = 64;
@@ -94,18 +94,37 @@ impl REDB {
                     }
                     println!("REDB: executed {n} steps");
                 }
-                Commands::Info { r } => match cpu.reg_val_by_name(&r) {
-                    Ok(reg) => {
-                        println!("{}\t: {}", r, reg);
+                Commands::Info { r } => {
+                    if r == "r" {
+                        for i in 0..32 {
+                            let reg_name = format!("x{i}");
+                            let reg = cpu.reg_val_by_name(&reg_name).unwrap();
+                            println!(
+                                "{} ({}) \t: {}\t{:#x}",
+                                reg_name,
+                                reg_name_by_id(i).unwrap(),
+                                reg,
+                                reg
+                            );
+                        }
+                        let pc = cpu.pc();
+                        println!("{}\t\t: {}\t{:#x}", "pc", pc, pc);
+                    } else {
+                        match cpu.reg_val_by_name(&r) {
+                            Ok(reg) => {
+                                println!("{}\t: {}\t{:#x}", r, reg, reg);
+                            }
+                            Err(e) => {
+                                println!("REDB: {e}");
+                            }
+                        }
                     }
-                    Err(e) => {
-                        println!("REDB: {e}");
-                    }
-                },
+                }
                 Commands::Scan { n, vaddr } => {
-                    for i in vaddr..(vaddr + n) {
-                        let val = cpu.mread::<u64>(vaddr);
-                        println!("{:#x}: {:#x}", i, val);
+                    for i in 0..n {
+                        let p_vaddr = vaddr + 4 * i;
+                        let val = cpu.mread::<u64>(p_vaddr);
+                        println!("{:#x}: {:016x}", p_vaddr, val);
                     }
                 }
             }
@@ -132,5 +151,16 @@ impl REDB {
 }
 
 fn print_help_info() {
-    println!("Help")
+    let help = r#"
+REDB: RISC-V Environment DeBugger. 
+    Command     Example         Detail
+    help        help            Print this help.
+    c           c               Execute the program to end.
+    q           q               Quit the debugger (also the simulator).
+    si [N]      si 10           Step the program for N steps and pause (N default to 1).
+    info <reg>  info sp         Print a register's status.
+    info r      info r          Print all registers' status (including PC).
+    x N ADDR    x 10 0x80000000 Print N quad-words starting at ADDR.
+"#;
+    println!("{help}")
 }
