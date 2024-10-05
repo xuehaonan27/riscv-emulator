@@ -465,24 +465,26 @@ pub enum Inst64 {
 #[macro_export]
 macro_rules! pinst {
     // SYSTEM
-    ($inst:tt) => {
-        format!("{}", stringify!($inst))
+    ($pc:ident, $inst:tt) => {
+        format!("{:8x}:\t{}", $pc, stringify!($inst))
     };
-    ($inst:tt, $t1:ident) => {
-        format!("{}\t{}", stringify!($inst), REGNAME[$t1 as usize])
+    ($pc:ident, $inst:tt, $t1:ident) => {
+        format!("{:8x}:\t{}\t{}", $pc, stringify!($inst), REGNAME[$t1 as usize])
     };
-    ($inst:tt, $t1:ident, $t2:ident) => {
+    ($pc:ident, $inst:tt, $t1:ident, $t2:ident) => {
         format!(
-            "{}\t{},{}",
+            "{:8x}:\t{}\t{},{}",
+            $pc,
             stringify!($inst),
             REGNAME[$t1 as usize],
             REGNAME[$t2 as usize]
         )
     };
     // OP, OP_32
-    ($inst:tt, $rd:ident, $rs1:ident, $rs2:ident) => {
+    ($pc:ident, $inst:tt, $rd:ident, $rs1:ident, $rs2:ident) => {
         format!(
-            "{}\t{},{},{}",
+            "{:8x}:\t{}\t{},{},{}",
+            $pc,
             stringify!($inst),
             REGNAME[$rd as usize],
             REGNAME[$rs1 as usize],
@@ -490,9 +492,10 @@ macro_rules! pinst {
         )
     };
     // BRANCH
-    ($inst:tt, $rs1:ident, $rs2:ident, $offset:ident=>offset) => {
+    ($pc:ident, $inst:tt, $rs1:ident, $rs2:ident, $offset:ident=>offset) => {
         format!(
-            "{}\t{},{},{:x}",
+            "{:8x}:\t{}\t{},{},{:x}",
+            $pc,
             stringify!($inst),
             REGNAME[$rs1 as usize],
             REGNAME[$rs2 as usize],
@@ -500,27 +503,30 @@ macro_rules! pinst {
         )
     };
     // JAL
-    ($inst:tt, $rd:ident, $offset:ident=>offset) => {
+    ($pc:ident, $inst:tt, $rd:ident, $offset:ident=>offset) => {
         format!(
-            "{}\t{},{:x}",
+            "{:8x}:\t{}\t{},{:x}",
+            $pc,
             stringify!($inst),
             REGNAME[$rd as usize],
             $offset
         )
     };
     // AUIPC
-    ($inst:tt, $t1:ident, $imm:ident=>imm) => {
+    ($pc:ident, $inst:tt, $t1:ident, $imm:ident=>imm) => {
         format!(
-            "{}\t{},{:#x}",
+            "{:8x}:\t{}\t{},{:#x}",
+            $pc,
             stringify!($inst),
             REGNAME[$t1 as usize],
             $imm
         )
     };
     // OP_IMM, OP_IMM_32
-    ($inst:tt, $t1:ident, $t2:ident, $imm:ident=>imm) => {
+    ($pc:ident, $inst:tt, $t1:ident, $t2:ident, $imm:ident=>imm) => {
         format!(
-            "{}\t{},{},{}",
+            "{:8x}:\t{}\t{},{},{}",
+            $pc,
             stringify!($inst),
             REGNAME[$t1 as usize],
             REGNAME[$t2 as usize],
@@ -528,9 +534,10 @@ macro_rules! pinst {
         )
     };
     // MEM
-    ($inst:tt, $t1:ident, $imm:ident($t2:ident)) => {
+    ($pc:ident, $inst:tt, $t1:ident, $imm:ident($t2:ident)) => {
         format!(
-            "{}\t{},{:x}({})",
+            "{:8x}:\t{}\t{},{:x}({})",
+            $pc,
             stringify!($inst),
             REGNAME[$t1 as usize],
             $imm,

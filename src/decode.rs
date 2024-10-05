@@ -36,7 +36,7 @@ pub fn decode(inst: u32) -> Result<ExecInternal> {
     };
 
     if let Ok(ref ex_inst) = ex_inst {
-        debug!("DECODE: {:?}", ex_inst.inst);
+        // debug!("DECODE: {:?}", ex_inst.inst);
     } else {
         error!("ERROR DECODING: {:#x}", inst);
     }

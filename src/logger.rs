@@ -16,7 +16,8 @@ impl Log for Logger {
             Level::Warn => 93,  // BrightYellow
             Level::Info => 32,  // Green
             Level::Debug => 34, // Blue
-            Level::Trace => 90, // BrightBlack
+            // Level::Trace => 90, // BrightBlack
+            Level::Trace => 36, // BrightBlack
         };
         println!(
             "\u{1B}[{}m[{:>5}] {}\u{1B}[0m",

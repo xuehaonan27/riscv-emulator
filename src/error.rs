@@ -6,6 +6,10 @@ pub enum Error {
     LoadElf(#[from] goblin::error::Error),
     #[error("Invalid ELF format: {0}")]
     InvalidElf(String),
+    #[error("Error when parsing input to REDB: {0}")]
+    DbgParse(String),
+    #[error("Unknown register name: {0}")]
+    InvalidRegName(String),
     #[error("Error when decoding: {0}")]
     Decode(String),
     #[error("Error when executing: {0}")]

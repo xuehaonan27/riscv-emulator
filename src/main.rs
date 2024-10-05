@@ -2,6 +2,7 @@ use std::path;
 
 use clap::Parser;
 use cpu::CPU;
+use debug::REDB;
 use elf::read_elf;
 use log::info;
 use reg::RegisterFile;
@@ -9,6 +10,7 @@ use vm::VirtualMemory;
 
 mod alu;
 mod cpu;
+mod debug;
 mod decode;
 mod elf;
 mod error;
@@ -36,7 +38,7 @@ fn main() {
 
     let args = Args::parse();
     let file_path = path::PathBuf::from(&args.input);
-
+    let enable_debug_mode = args.debug;
     info!("Loading file: {file_path:?}");
 
     // Parse ELF file
@@ -49,7 +51,12 @@ fn main() {
 
     cpu.init_elfinfo_64(&elf_info);
 
-    cpu.cpu_exec().expect("Failed to execute the program");
+    if !enable_debug_mode {
+        cpu.cpu_exec(None).expect("Failed to execute the program");
+    } else {
+        let mut redb = REDB::new();
+        redb.run(&mut cpu);
+    }
 
     // Atomatically drop all resources
 }
