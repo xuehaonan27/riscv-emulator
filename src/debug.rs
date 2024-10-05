@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use clap_num::maybe_hex;
 use std::io::{self, BufRead, Write};
 
 use crate::cpu::{reg_name_by_id, CPU};
@@ -9,7 +10,6 @@ const REDB_BUF_SIZE: usize = 64;
 pub struct REDB {
     // Command line input buffer
     buf: String,
-    //
 }
 
 #[derive(Parser, Debug)]
@@ -38,7 +38,7 @@ enum Commands {
     #[clap(alias = "x")]
     Scan {
         n: u64,
-        // #[clap(value_parser=maybe_hex::<u64>)]
+        #[clap(value_parser=maybe_hex::<u64>)]
         vaddr: u64,
     },
 }
