@@ -27,10 +27,13 @@ pub struct CPU<'a> {
 
     // Atomic reference to virtual memory
     vm: &'a mut VirtualMemory,
+
+    // Itrace switch
+    itrace: bool,
 }
 
 impl<'a> CPU<'a> {
-    pub fn new(vm: &'a mut VirtualMemory) -> CPU<'a> {
+    pub fn new(vm: &'a mut VirtualMemory, itrace: bool) -> CPU<'a> {
         // x0 already set to 0
         let reg_file = RegisterFile::empty();
         let pc = ProgramCounter::new();
@@ -40,6 +43,7 @@ impl<'a> CPU<'a> {
             reg_file,
             pc,
             vm,
+            itrace,
         }
     }
 
@@ -139,51 +143,67 @@ impl<'a> CPU<'a> {
         match exec_itrnl.inst {
             Inst64::add => {
                 // R x[rd] = x[rs1] + x[rs2]
-                trace!("{}", pinst!(pc, add, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, add, rd, rs1, rs2));
+                }
                 let result = src1.wrapping_add(src2); // ignore overflow
                 reg_file.write(rd, result);
             }
             Inst64::addi => {
-                trace!("{}", pinst!(pc, addi, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, addi, rd, rs1, imm=>imm));
+                }
                 // I x[rd] = x[rs1] + sext(immediate)
                 let result = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 reg_file.write(rd, result);
             }
             Inst64::addiw => {
                 // I x[rd] = sext((x[rs1] + sext(immediate))[31:0])
-                trace!("{}", pinst!(pc, addiw, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, addiw, rd, rs1, imm=>imm));
+                }
                 let result = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 let result = sext(trunc_to_32_bit(result), WORD_BITWIDTH);
                 reg_file.write(rd, result as u64);
             }
             Inst64::addw => {
                 // R x[rd] = sext((x[rs1] + x[rs2])[31:0])
-                trace!("{}", pinst!(pc, addw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, addw, rd, rs1, rs2));
+                }
                 let result = src1.wrapping_add(src2);
                 let result = sext(trunc_to_32_bit(result), WORD_BITWIDTH);
                 reg_file.write(rd, result as u64);
             }
             Inst64::and => {
                 // R x[rd] = x[rs1] & x[rs2]
-                trace!("{}", pinst!(pc, and, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, and, rd, rs1, rs2));
+                }
                 let result = src1.bitand(src2);
                 reg_file.write(rd, result);
             }
             Inst64::andi => {
-                trace!("{}", pinst!(pc, andi, rd, rs1, imm=>imm));
                 // I x[rd] = x[rs1] & sext(immediate)
+                if self.itrace {
+                    trace!("{}", pinst!(pc, andi, rd, rs1, imm=>imm));
+                }
                 let result = src1.bitand(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 reg_file.write(rd, result);
             }
             Inst64::auipc => {
                 // U x[rd] = pc + sext(immediate[31:12] << 12)
-                trace!("{}", pinst!(pc, auipc, rd, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, auipc, rd, imm=>imm));
+                }
                 let result = pc.wrapping_add((sext(imm, U_TYPE_IMM_BITWIDTH) as u64) << 12);
                 reg_file.write(rd, result);
             }
             Inst64::beq => {
                 // B if (rs1 == rs2) pc += sext(offset)
-                trace!("{}", pinst!(pc, beq, rs1, rs2, imm=>offset));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, beq, rs1, rs2, imm=>offset));
+                }
                 if src1 == src2 {
                     exec_itrnl.pc = pc.wrapping_add(sext(imm, B_TYPE_IMM_BITWIDTH) as u64);
                     use_new_pc = true;
@@ -191,7 +211,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::bge => {
                 // B if (rs1 >= rs2) pc += sext(offset)
-                trace!("{}", pinst!(pc, bge, rs1, rs2, imm=>offset));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, bge, rs1, rs2, imm=>offset));
+                }
                 if (src1 as i64) >= (src2 as i64) {
                     exec_itrnl.pc = pc.wrapping_add(sext(imm, B_TYPE_IMM_BITWIDTH) as u64);
                     use_new_pc = true;
@@ -199,7 +221,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::bgeu => {
                 // B if (rs1 >= rs2) pc += sext(offset)
-                trace!("{}", pinst!(pc, bgeu, rs1, rs2, imm=>offset));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, bgeu, rs1, rs2, imm=>offset));
+                }
                 if (src1 as u64) >= (src2 as u64) {
                     exec_itrnl.pc = pc.wrapping_add(sext(imm, B_TYPE_IMM_BITWIDTH) as u64);
                     use_new_pc = true;
@@ -207,7 +231,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::blt => {
                 // B if (rs1 < rs2) pc += sext(offset)
-                trace!("{}", pinst!(pc, blt, rs1, rs2, imm=>offset));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, blt, rs1, rs2, imm=>offset));
+                }
                 if (src1 as i64) < (src2 as i64) {
                     exec_itrnl.pc = pc.wrapping_add(sext(imm, B_TYPE_IMM_BITWIDTH) as u64);
                     use_new_pc = true;
@@ -215,7 +241,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::bltu => {
                 // B if (rs1 < rs2) pc += sext(offset)
-                trace!("{}", pinst!(pc, bltu, rs1, rs2, imm=>offset));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, bltu, rs1, rs2, imm=>offset));
+                }
                 if (src1 as u64) < (src2 as u64) {
                     exec_itrnl.pc = pc.wrapping_add(sext(imm, B_TYPE_IMM_BITWIDTH) as u64);
                     use_new_pc = true;
@@ -223,7 +251,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::bne => {
                 // B if (rs1 != rs2) pc += sext(offset)
-                trace!("{}", pinst!(pc, bne, rs1, rs2, imm=>offset));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, bne, rs1, rs2, imm=>offset));
+                }
                 if src1 != src2 {
                     exec_itrnl.pc = pc.wrapping_add(sext(imm, B_TYPE_IMM_BITWIDTH) as u64);
                     use_new_pc = true;
@@ -232,7 +262,9 @@ impl<'a> CPU<'a> {
 
             Inst64::div => {
                 // R x[rd] = x[rs1] ÷s x[rs2]
-                trace!("{}", pinst!(pc, div, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, div, rd, rs1, rs2));
+                }
                 if src2 == 0 {
                     return Err(Error::Exception(Exception::DividedByZero));
                 }
@@ -241,7 +273,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::divu => {
                 // R x[rd] = x[rs1] ÷u x[rs2]
-                trace!("{}", pinst!(pc, divu, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, divu, rd, rs1, rs2));
+                }
                 if src2 == 0 {
                     return Err(Error::Exception(Exception::DividedByZero));
                 }
@@ -250,7 +284,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::divuw => {
                 // R x[rd] = sext(x[rs1][31:0] ÷u x[rs2][31:0])
-                trace!("{}", pinst!(pc, divuw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, divuw, rd, rs1, rs2));
+                }
                 if trunc_to_32_bit(src2) == 0 {
                     return Err(Error::Exception(Exception::DividedByZero));
                 }
@@ -260,7 +296,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::divw => {
                 // R x[rd] = sext(x[rs1][31:0] ÷s x[rs2][31:0])
-                trace!("{}", pinst!(pc, divw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, divw, rd, rs1, rs2));
+                }
                 if trunc_to_32_bit(src2) == 0 {
                     return Err(Error::Exception(Exception::DividedByZero));
                 }
@@ -272,7 +310,9 @@ impl<'a> CPU<'a> {
             Inst64::ebreak => {
                 // I RaiseException(Breakpoint)
                 // Temporary implementation: return exit code at x10.
-                trace!("{}", pinst!(pc, ebreak));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, ebreak));
+                }
                 let x10 = reg_file.read(10);
                 self.halt(pc, x10); // HALT at current code.
                 let msg = format!("ebreak at {:#x}, code {}", pc, x10);
@@ -284,14 +324,18 @@ impl<'a> CPU<'a> {
 
             Inst64::jal => {
                 // J x[rd] = pc+4; pc += sext(offset)
-                trace!("{}", pinst!(pc, jal, rd, imm=>offset));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, jal, rd, imm=>offset));
+                }
                 reg_file.write(rd, pc + 4); // rd default to x1
                 exec_itrnl.pc = pc.wrapping_add(sext(imm, J_TYPE_IMM_BITWIDTH) as u64);
                 use_new_pc = true;
             }
             Inst64::jalr => {
                 // I t=pc+4; pc=(x[rs1]+sext(offset))&∼1; x[rd]=t
-                trace!("{}", pinst!(pc, jalr, rd, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, jalr, rd, imm(rs1)));
+                }
                 exec_itrnl.pc = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64) & (!1);
                 reg_file.write(rd, pc + 4); // rd default to x1
                 use_new_pc = true;
@@ -299,7 +343,9 @@ impl<'a> CPU<'a> {
 
             Inst64::lb => {
                 // I x[rd] = sext(M[x[rs1] + sext(offset)][31:0])
-                trace!("{}", pinst!(pc, lb, rd, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, lb, rd, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 let result = self.vm.mread::<u8>(vaddr as usize);
                 // SEXT in RV64I
@@ -308,7 +354,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::lbu => {
                 // I x[rd] = M[x[rs1] + sext(offset)][31:0]
-                trace!("{}", pinst!(pc, lbu, rd, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, lbu, rd, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 let result = self.vm.mread::<u8>(vaddr as usize);
                 // ZERO extend: just as u64
@@ -316,14 +364,18 @@ impl<'a> CPU<'a> {
             }
             Inst64::ld => {
                 // I x[rd] = M[x[rs1] + sext(offset)][63:0]
-                trace!("{}", pinst!(pc, ld, rd, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, ld, rd, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 let result = self.vm.mread::<u64>(vaddr as usize);
                 reg_file.write(rd, result);
             }
             Inst64::lh => {
                 // I x[rd] = sext(M[x[rs1] + sext(offset)][15:0])
-                trace!("{}", pinst!(pc, lh, rd, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, lh, rd, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 let result = self.vm.mread::<u16>(vaddr as usize);
                 // SEXT in RV64I
@@ -332,7 +384,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::lhu => {
                 // I x[rd] = M[x[rs1] + sext(offset)][31:0]
-                trace!("{}", pinst!(pc, lhu, rd, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, lhu, rd, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 let result = self.vm.mread::<u16>(vaddr as usize);
                 // ZERO extend: just as u64
@@ -340,14 +394,18 @@ impl<'a> CPU<'a> {
             }
             Inst64::lui => {
                 // U x[rd] = sext(immediate[31:12] << 12)
-                trace!("{}", pinst!(pc, lui, rd, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, lui, rd, imm=>imm));
+                }
                 let mask: u64 = !0b1111_1111_1111;
                 let result = ((sext(imm, U_TYPE_IMM_BITWIDTH) << 12) as u64) & mask;
                 reg_file.write(rd, result);
             }
             Inst64::lw => {
                 // I x[rd] = sext(M[x[rs1] + sext(offset)][31:0])
-                trace!("{}", pinst!(pc, lw, rd, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, lw, rd, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 let result = self.vm.mread::<u32>(vaddr as usize);
                 // SEXT in RV64I
@@ -356,7 +414,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::lwu => {
                 // I x[rd] = M[x[rs1] + sext(offset)][31:0]
-                trace!("{}", pinst!(pc, lwu, rd, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, lwu, rd, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 let result = self.vm.mread::<u32>(vaddr as usize);
                 // ZERO extend: just as u64
@@ -364,19 +424,24 @@ impl<'a> CPU<'a> {
             }
             Inst64::mret => {
                 // R
-                trace!("{}", pinst!(pc, mret));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, mret));
+                }
                 todo!()
             }
             Inst64::mul => {
                 // R x[rd] = x[rs1] × x[rs2]
-                trace!("{}", pinst!(pc, mul, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, mul, rd, rs1, rs2));
+                }
                 let result = src1.wrapping_mul(src2);
                 reg_file.write(rd, result);
             }
             Inst64::mulh => {
                 // R x[rd] = (x[rs1] s×s x[rs2]) >>s XLEN
-                trace!("{}", pinst!(pc, mulh, rd, rs1, rs2));
-
+                if self.itrace {
+                    trace!("{}", pinst!(pc, mulh, rd, rs1, rs2));
+                }
                 // RV64
                 let result = (src1 as i128).wrapping_mul(src2 as i128);
                 let result = get_high_64_bit(result as u128);
@@ -384,7 +449,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::mulhsu => {
                 // R x[rd] = (x[rs1] s×u x[rs2]) >>s XLEN
-                trace!("{}", pinst!(pc, mulhsu, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, mulhsu, rd, rs1, rs2));
+                }
                 let t_src1 = src1 as i64;
                 let t_src2 = src2 as u64;
                 let result = (t_src1 as i128).wrapping_mul(t_src2 as i128);
@@ -393,34 +460,44 @@ impl<'a> CPU<'a> {
             }
             Inst64::mulhu => {
                 // R x[rd] = (x[rs1] u×u x[rs2]) >>u XLEN
-                trace!("{}", pinst!(pc, mulhu, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, mulhu, rd, rs1, rs2));
+                }
                 let result = (src1 as u128).wrapping_mul(src2 as u128);
                 let result = get_high_64_bit(result);
                 reg_file.write(rd, result);
             }
             Inst64::mulw => {
                 // R x[rd] = sext((x[rs1] × x[rs2])[31:0])
-                trace!("{}", pinst!(pc, mulw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, mulw, rd, rs1, rs2));
+                }
                 let result = src1.wrapping_mul(src2);
                 let result = sext(trunc_to_32_bit(result), WORD_BITWIDTH);
                 reg_file.write(rd, result as u64);
             }
             Inst64::or => {
                 // R x[rd] = x[rs1] | x[rs2]
-                trace!("{}", pinst!(pc, or, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, or, rd, rs1, rs2));
+                }
                 let result = src1.bitor(src2);
                 reg_file.write(rd, result);
             }
             Inst64::ori => {
                 // I x[rd] = x[rs1] | sext(immediate)
-                trace!("{}", pinst!(pc, ori, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, ori, rd, rs1, imm=>imm));
+                }
                 let result = src1.bitor(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 reg_file.write(rd, result);
             }
 
             Inst64::rem => {
                 // R x[rd] = x[rs1] %s x[rs2]
-                trace!("{}", pinst!(pc, rem, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, rem, rd, rs1, rs2));
+                }
                 if src2 == 0 {
                     return Err(Error::Exception(Exception::DividedByZero));
                 }
@@ -429,7 +506,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::remu => {
                 // R x[rd] = x[rs1] %u x[rs2]
-                trace!("{}", pinst!(pc, remu, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, remu, rd, rs1, rs2));
+                }
                 if src2 == 0 {
                     return Err(Error::Exception(Exception::DividedByZero));
                 }
@@ -438,7 +517,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::remuw => {
                 // R x[rd] = sext(x[rs1][31:0] %u x[rs2][31:0])
-                trace!("{}", pinst!(pc, remuw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, remuw, rd, rs1, rs2));
+                }
                 if src2 == 0 {
                     return Err(Error::Exception(Exception::DividedByZero));
                 }
@@ -450,7 +531,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::remw => {
                 // R x[rd] = sext(x[rs1][31:0] %s x[rs2][31:0])
-                trace!("{}", pinst!(pc, remw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, remw, rd, rs1, rs2));
+                }
                 if src2 == 0 {
                     return Err(Error::Exception(Exception::DividedByZero));
                 }
@@ -461,28 +544,36 @@ impl<'a> CPU<'a> {
             }
             Inst64::sb => {
                 // S M[x[rs1] + sext(offset)] = x[rs2][7:0]
-                trace!("{}", pinst!(pc, sb, rs2, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sb, rs2, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, S_TYPE_IMM_BITWIDTH) as u64);
                 let result = trunc_to_8_bit(src2);
                 self.vm.mwrite::<u8>(vaddr as usize, result as u8);
             }
             Inst64::sd => {
                 // S M[x[rs1] + sext(offset)] = x[rs2][63:0]
-                trace!("{}", pinst!(pc, sd, rs2, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sd, rs2, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, S_TYPE_IMM_BITWIDTH) as u64);
                 self.vm.mwrite::<u64>(vaddr as usize, src2);
                 // self.vm.mread::<u64>(vaddr as usize);
             }
             Inst64::sh => {
                 // S M[x[rs1] + sext(offset)] = x[rs2][15:0]
-                trace!("{}", pinst!(pc, sh, rs2, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sh, rs2, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, S_TYPE_IMM_BITWIDTH) as u64);
                 self.vm
                     .mwrite::<u16>(vaddr as usize, trunc_to_16_bit(src2) as u16);
             }
             Inst64::sll => {
                 // R x[rd] = x[rs1] << x[rs2]
-                trace!("{}", pinst!(pc, sll, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sll, rd, rs1, rs2));
+                }
                 // let t_src2 = trunc_to_5_bit(src2); // RV32
                 let t_src2 = trunc_to_6_bit(src2); // RV64
                 let result = src1.wrapping_shl(t_src2 as u32);
@@ -490,7 +581,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::slli => {
                 // I x[rd] = x[rs1] << shamt
-                trace!("{}", pinst!(pc, slli, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, slli, rd, rs1, imm=>imm));
+                }
                 // RV32I
                 // let (shamt, legal) = trunc_to_5_bit_and_check(imm);
                 // if !legal {
@@ -503,7 +596,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::slliw => {
                 // I x[rd] = x[rs1] << shamt
-                trace!("{}", pinst!(pc, slliw, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, slliw, rd, rs1, imm=>imm));
+                }
                 let (shamt, legal) = trunc_to_5_bit_and_check(imm);
                 if !legal {
                     return Err(Error::Exception(Exception::IllegalInstruction));
@@ -514,7 +609,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::sllw => {
                 // R x[rd] = sext((x[rs1] << x[rs2][4:0])[31:0])
-                trace!("{}", pinst!(pc, sllw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sllw, rd, rs1, rs2));
+                }
                 let t_src1 = trunc_to_32_bit(src1);
                 let t_src2 = trunc_to_5_bit(src2);
                 let result = t_src1.wrapping_shl(t_src2 as u32);
@@ -523,33 +620,43 @@ impl<'a> CPU<'a> {
             }
             Inst64::slt => {
                 // R x[rd] = x[rs1] <s x[rs2]
-                trace!("{}", pinst!(pc, slt, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, slt, rd, rs1, rs2));
+                }
                 let write_val = if (src1 as i64) < (src2 as i64) { 1 } else { 0 };
                 reg_file.write(rd, write_val);
             }
             Inst64::slti => {
                 // I x[rd] = x[rs1] <u sext(immediate)
-                trace!("{}", pinst!(pc, slti, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, slti, rd, rs1, imm=>imm));
+                }
                 let ext_imm = sext(imm, I_TYPE_IMM_BITWIDTH) as i64;
                 let write_val = if (src1 as i64) < ext_imm { 1 } else { 0 };
                 reg_file.write(rd, write_val);
             }
             Inst64::sltiu => {
                 // I x[rd] = x[rs1] <u sext(immediate)
-                trace!("{}", pinst!(pc, sltiu, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sltiu, rd, rs1, imm=>imm));
+                }
                 let ext_imm: u64 = sext(imm, I_TYPE_IMM_BITWIDTH) as u64;
                 let write_val = if src1 < ext_imm { 1 } else { 0 };
                 reg_file.write(rd, write_val);
             }
             Inst64::sltu => {
                 // R x[rd] = x[rs1] <s x[rs2]
-                trace!("{}", pinst!(pc, sltu, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sltu, rd, rs1, rs2));
+                }
                 let write_val = if (src1 as u64) < (src2 as u64) { 1 } else { 0 };
                 reg_file.write(rd, write_val);
             }
             Inst64::sra => {
                 // R x[rd] = x[rs1] >>s x[rs2]
-                trace!("{}", pinst!(pc, sra, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sra, rd, rs1, rs2));
+                }
                 // let t_src2 = trunc_to_5_bit(src2); // RV32
                 let t_src2 = trunc_to_6_bit(src2); // RV64
                                                    // i64 shr automatically fill high bits with sign-bit
@@ -558,7 +665,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::srai => {
                 // I x[rd] = x[rs1] >>s shamt
-                trace!("{}", pinst!(pc, srai, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, srai, rd, rs1, imm=>imm));
+                }
                 // RV32I
                 // let (shamt, legal) = trunc_to_5_bit_and_check(imm);
                 // if !legal {
@@ -571,7 +680,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::sraiw => {
                 // I x[rd] = sext(x[rs1][31:0] >>s shamt)
-                trace!("{}", pinst!(pc, sraiw, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sraiw, rd, rs1, imm=>imm));
+                }
                 let t_src1: i64 = sext(trunc_to_32_bit(src1), WORD_BITWIDTH);
                 let (shamt, legal) = trunc_to_5_bit_and_check(imm);
                 if !legal {
@@ -582,7 +693,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::sraw => {
                 // R x[rd] = x[rs1] >>s x[rs2]
-                trace!("{}", pinst!(pc, sraw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sraw, rd, rs1, rs2));
+                }
                 let t_src1: i64 = sext(trunc_to_32_bit(src1), WORD_BITWIDTH);
                 let t_src2 = trunc_to_5_bit(src2);
                 let result = t_src1.wrapping_shr(t_src2 as u32);
@@ -591,12 +704,16 @@ impl<'a> CPU<'a> {
             }
             Inst64::sret => {
                 // R
-                trace!("{}", pinst!(pc, sret));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sret));
+                }
                 todo!()
             }
             Inst64::srl => {
                 // R x[rd] = x[rs1] >>u x[rs2]
-                trace!("{}", pinst!(pc, srl, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, srl, rd, rs1, rs2));
+                }
                 // let t_src2 = trunc_to_5_bit(src2); // RV32
                 let t_src2 = trunc_to_6_bit(src2); // RV64
                                                    // i64 shr automatically fill high bits with 0-bit
@@ -605,7 +722,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::srli => {
                 // I x[rd] = x[rs1] >>s shamt
-                trace!("{}", pinst!(pc, srli, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, srli, rd, rs1, imm=>imm));
+                }
                 // RV32I
                 // let (shamt, legal) = trunc_to_5_bit_and_check(imm);
                 // if !legal {
@@ -618,7 +737,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::srliw => {
                 // I x[rd] = sext(x[rs1][31:0] >>s shamt)
-                trace!("{}", pinst!(pc, srliw, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, srliw, rd, rs1, imm=>imm));
+                }
                 let t_src1: u64 = trunc_to_32_bit(src1);
                 let (shamt, legal) = trunc_to_5_bit_and_check(imm);
                 if !legal {
@@ -632,7 +753,9 @@ impl<'a> CPU<'a> {
             }
             Inst64::srlw => {
                 // R x[rd] = x[rs1] >>s x[rs2]
-                trace!("{}", pinst!(pc, srlw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, srlw, rd, rs1, rs2));
+                }
                 let t_src1: u64 = trunc_to_32_bit(src1);
                 let t_src2 = trunc_to_5_bit(src2);
                 let result = t_src1.wrapping_shr(t_src2 as u32);
@@ -641,20 +764,26 @@ impl<'a> CPU<'a> {
             }
             Inst64::sub => {
                 // R x[rd] = x[rs1] - x[rs2]
-                trace!("{}", pinst!(pc, sub, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sub, rd, rs1, rs2));
+                }
                 let result = src1.wrapping_sub(src2);
                 reg_file.write(rd, result);
             }
             Inst64::subw => {
                 // R x[rd] = sext((x[rs1] - x[rs2])[31:0])
-                trace!("{}", pinst!(pc, subw, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, subw, rd, rs1, rs2));
+                }
                 let result = trunc_to_32_bit(src1.wrapping_sub(src2));
                 let result = sext(result, WORD_BITWIDTH);
                 reg_file.write(rd, result as u64);
             }
             Inst64::sw => {
                 // S M[x[rs1] + sext(offset)] = x[rs2][31:0]
-                trace!("{}", pinst!(pc, sw, rs2, imm(rs1)));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, sw, rs2, imm(rs1)));
+                }
                 let vaddr = src1.wrapping_add(sext(imm, S_TYPE_IMM_BITWIDTH) as u64);
                 let write_val = trunc_to_32_bit(src2);
                 self.vm.mwrite::<u32>(vaddr as usize, write_val as u32);
@@ -663,13 +792,17 @@ impl<'a> CPU<'a> {
 
             Inst64::xor => {
                 // R x[rd] = x[rs1] ˆ x[rs2]
-                trace!("{}", pinst!(pc, xor, rd, rs1, rs2));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, xor, rd, rs1, rs2));
+                }
                 let result = src1.bitxor(src2);
                 reg_file.write(rd, result);
             }
             Inst64::xori => {
                 // I x[rd] = x[rs1] ˆ sext(immediate)
-                trace!("{}", pinst!(pc, xori, rd, rs1, imm=>imm));
+                if self.itrace {
+                    trace!("{}", pinst!(pc, xori, rd, rs1, imm=>imm));
+                }
                 let result = src1.bitxor(sext(imm, I_TYPE_IMM_BITWIDTH) as u64);
                 reg_file.write(rd, result);
             }

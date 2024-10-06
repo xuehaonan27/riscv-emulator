@@ -28,6 +28,10 @@ struct Args {
     /// Enable debug mode. Not set to enable batch mode.
     #[arg(short, long)]
     debug: bool,
+
+    /// Enable itrace.
+    #[arg(long)]
+    itrace: bool,
 }
 
 fn main() {
@@ -38,6 +42,7 @@ fn main() {
     let args = Args::parse();
     let file_path = path::PathBuf::from(&args.input);
     let enable_debug_mode = args.debug;
+    let itrace = args.itrace;
     info!("Loading file: {file_path:?}");
 
     // Parse ELF file
@@ -46,7 +51,7 @@ fn main() {
     // Load the file into virtual memory
     let mut vm = VirtualMemory::from_elf_info(&elf_info);
 
-    let mut cpu = CPU::new(&mut vm);
+    let mut cpu = CPU::new(&mut vm, itrace);
 
     cpu.init_elfinfo_64(&elf_info);
 

@@ -1,7 +1,7 @@
 use std::{fs, ops::Range, path::PathBuf};
 
 use goblin::elf::{header, program_header, Elf};
-use log::{debug, error, info};
+use log::{error, info};
 
 use crate::error::{Error, Result};
 
@@ -141,8 +141,8 @@ pub fn read_elf(path: &PathBuf) -> Result<LoadElfInfo> {
             }
             let vm_range = ph.vm_range();
             let file_range = ph.file_range();
-            debug!("vm_range: {:#x?}", vm_range);
-            debug!("file_range: {:#x?}", file_range);
+            // debug!("vm_range: {:#x?}", vm_range);
+            // debug!("file_range: {:#x?}", file_range);
 
             let start_vaddr = vm_range.start;
             let end_vaddr = vm_range.end;

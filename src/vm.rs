@@ -1,7 +1,5 @@
 use std::ptr::{read_volatile, write_volatile};
 
-use log::debug;
-
 use crate::elf::LoadElfInfo;
 
 const PROTECT_SIZE: usize = 1 * 1024 * 1024; // 1 MiB, for separation of stack
@@ -36,7 +34,7 @@ impl VirtualMemory {
 
         let mut vm = VirtualMemory::new(tot_size);
         vm.ld_start = info.min_vaddr();
-        debug!("vm.ld_start = {:#x}", vm.ld_start);
+        // debug!("vm.ld_start = {:#x}", vm.ld_start);
 
         for (vm_range, file_range) in std::iter::zip(info.vm_ranges(), info.file_ranges()) {
             // copy all bytes into the virtual memory
@@ -45,7 +43,7 @@ impl VirtualMemory {
             load_range.start -= vm.ld_start;
             // load_range.end -= vm.ld_start;
             load_range.end = load_range.start + load_length;
-            debug!("load {:#x?} from {:#x?}", load_range, file_range);
+            // debug!("load {:#x?} from {:#x?}", load_range, file_range);
             vm.mm[load_range].copy_from_slice(&info.raw_data()[file_range.clone()]);
         }
 
