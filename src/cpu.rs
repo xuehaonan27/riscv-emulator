@@ -8,7 +8,15 @@ use std::{
 use log::{error, info, trace};
 
 use crate::{
-    callstack::CallStack, check, decode::decode, elf::LoadElfInfo, error::{Error, Exception, Result}, insts::ExecInternal, pinst, reg::{ProgramCounter, RegisterFile, REGNAME}, vm::VirtualMemory
+    callstack::CallStack,
+    check,
+    decode::decode,
+    elf::LoadElfInfo,
+    error::{Error, Exception, Result},
+    insts::ExecInternal,
+    pinst,
+    reg::{ProgramCounter, RegisterFile, REGNAME},
+    vm::VirtualMemory,
 };
 
 pub struct CPU<'a> {
@@ -32,7 +40,11 @@ pub struct CPU<'a> {
 }
 
 impl<'a> CPU<'a> {
-    pub fn new(vm: &'a mut VirtualMemory, callstack: &'a mut CallStack<'a>, itrace: bool) -> CPU<'a> {
+    pub fn new(
+        vm: &'a mut VirtualMemory,
+        callstack: &'a mut CallStack<'a>,
+        itrace: bool,
+    ) -> CPU<'a> {
         // x0 already set to 0
         let reg_file = RegisterFile::empty();
         let pc = ProgramCounter::new();
@@ -329,11 +341,11 @@ impl<'a> CPU<'a> {
                 }
                 reg_file.write(rd, pc + 4); // rd default to x1
                 exec_itrnl.pc = pc.wrapping_add(sext(imm, J_TYPE_IMM_BITWIDTH) as u64);
-                if self.callstack.ftrace {
-                    let target_pc = exec_itrnl.pc;
-                    // info!("target_pc: {target_pc:#x}");
-                    self.callstack.call(pc, target_pc);
-                }
+
+                // call
+                let target_pc = exec_itrnl.pc;
+                self.callstack.call(pc, target_pc);
+
                 use_new_pc = true;
             }
             Inst64::jalr => {
@@ -341,11 +353,12 @@ impl<'a> CPU<'a> {
                 if self.itrace {
                     trace!("{}", pinst!(pc, jalr, rd, imm(rs1)));
                 }
-                if self.callstack.ftrace {
-                    if exec_itrnl.raw_inst == 0x00008067 {
-                        self.callstack.ret(pc);
-                    }
+
+                // ret
+                if exec_itrnl.raw_inst == 0x00008067 {
+                    self.callstack.ret(pc);
                 }
+
                 exec_itrnl.pc = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64) & (!1);
                 reg_file.write(rd, pc + 4); // rd default to x1
                 use_new_pc = true;
@@ -930,6 +943,10 @@ impl<'a> CPU<'a> {
 
     pub fn mread<T: Sized + Display>(&self, vaddr: u64) -> T {
         self.vm.mread(vaddr as usize)
+    }
+
+    pub fn backtrace(&self) {
+        self.callstack.backtrace();
     }
 }
 

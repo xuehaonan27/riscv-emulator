@@ -41,6 +41,8 @@ enum Commands {
         #[clap(value_parser=maybe_hex::<u64>)]
         vaddr: u64,
     },
+    #[clap(alias = "bt")]
+    Backtrace,
 }
 
 impl REDB {
@@ -126,6 +128,10 @@ impl REDB {
                         let val = cpu.mread::<u64>(p_vaddr);
                         println!("{:#x}: {:016x}", p_vaddr, val);
                     }
+                }
+                Commands::Backtrace => {
+                    println!("REDB: backtrace");
+                    cpu.backtrace()
                 }
             }
         }

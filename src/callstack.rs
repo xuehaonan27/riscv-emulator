@@ -29,7 +29,7 @@ impl<'a> CallStack<'a> {
             let len = self.call_stack.len();
             if self.ftrace {
                 trace!(
-                    "{:#x}:{} call [{func_name}@{:#x}]",
+                    "{:x}:{} call [{func_name}@{:#x}]",
                     pc,
                     iter::repeat(' ').take(len).collect::<String>(),
                     target_pc
@@ -43,10 +43,16 @@ impl<'a> CallStack<'a> {
         if let Some((_, func_name)) = self.call_stack.pop_back() {
             let len = self.call_stack.len();
             trace!(
-                "{:#x}:{} ret [{func_name}]",
+                "{:x}:{} ret [{func_name}]",
                 pc,
                 iter::repeat(' ').take(len).collect::<String>()
             );
+        }
+    }
+
+    pub fn backtrace(&self) {
+        for (i, (pc, func_name)) in self.call_stack.iter().enumerate() {
+            println!("{} {:#x}: {}", i, pc, func_name);
         }
     }
 }
