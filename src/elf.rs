@@ -1,4 +1,4 @@
-use std::{fs, ops::Range, path::PathBuf};
+use std::{collections::HashMap, fs, ops::Range, path::PathBuf};
 
 use goblin::elf::{header, program_header, Elf};
 use log::{error, info};
@@ -13,6 +13,7 @@ pub struct LoadElfInfo {
     file_ranges: Vec<Range<usize>>,
     min_vaddr: usize,
     max_vaddr: usize,
+    symbol_map: HashMap<u64, String>,
 }
 
 impl LoadElfInfo {
@@ -42,6 +43,10 @@ impl LoadElfInfo {
 
     pub fn max_vaddr(&self) -> usize {
         self.max_vaddr
+    }
+
+    pub fn symbol_map(&self) -> &HashMap<u64, String> {
+        &self.symbol_map
     }
 }
 
@@ -107,9 +112,12 @@ pub fn read_elf(path: &PathBuf) -> Result<LoadElfInfo> {
     */
 
     // Symbol table
+    let mut symbol_map = HashMap::new();
     for sym in elf.syms.iter() {
         if let Some(name) = elf.strtab.get_at(sym.st_name) {
+            // maybe we could add elf-trace?
             info!("Symbol: {}, address: {:#x}", name, sym.st_value);
+            symbol_map.insert(sym.st_value, name.to_string());
         }
     }
 
@@ -174,13 +182,14 @@ pub fn read_elf(path: &PathBuf) -> Result<LoadElfInfo> {
     }
 
     let info = LoadElfInfo {
-        raw_data,
+        raw_data: raw_data.clone(),
         is_64_bit,
         entry_point,
         vm_ranges,
         file_ranges,
         min_vaddr,
         max_vaddr,
+        symbol_map,
     };
     Ok(info)
 }

@@ -11,6 +11,7 @@ This is RISC-V simulator written in Rust Programming Language.
 5. Run `make M=debug T=<test_name>` to run a single test with debugger.
 6. Note: add `IT=enable` to make command to enable itrace.
 7. Note: add `MT=enable` to make command to enable mtrace.
+8. Note: add `FT=enable` to make command to enable ftrace.
 
 ## Benches
 ### Dhrystone

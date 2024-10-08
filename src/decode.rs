@@ -55,6 +55,7 @@ pub fn decode(inst: u32) -> Result<ExecInternal> {
 /// 0000011 LOAD: I type
 fn decode_load(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
     exec_internal.inst = match funct3 {
@@ -92,6 +93,7 @@ fn decode_misc_mem(_inst: u32) -> Result<ExecInternal> {
 /// 0010011 OP_IMM: I type
 fn decode_op_imm(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
     let funct7 = funct7(inst);
@@ -149,6 +151,7 @@ fn decode_op_imm(inst: u32) -> Result<ExecInternal> {
 /// 0010111 AUIPC: U type
 fn decode_op_auipc(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     exec_internal.inst = Inst64::auipc;
     exec_internal.rd = rd(inst);
@@ -160,6 +163,7 @@ fn decode_op_auipc(inst: u32) -> Result<ExecInternal> {
 /// 0011011 OP_IMM_32: R type
 fn decode_op_imm_32(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
     let funct7 = funct7(inst);
@@ -198,6 +202,7 @@ fn decode_op_imm_32(inst: u32) -> Result<ExecInternal> {
 /// 0100011 STORE: S type
 fn decode_store(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
 
@@ -233,6 +238,7 @@ fn decode_amo(_inst: u32) -> Result<ExecInternal> {
 /// 0110011 OP: R type
 fn decode_op(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
     let funct7 = funct7(inst);
@@ -328,6 +334,7 @@ fn decode_op(inst: u32) -> Result<ExecInternal> {
 /// 0110111 LUI: U type
 fn decode_lui(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     exec_internal.inst = Inst64::lui;
     exec_internal.rd = rd(inst);
@@ -339,6 +346,7 @@ fn decode_lui(inst: u32) -> Result<ExecInternal> {
 /// 0111011 OP_32: R type
 fn decode_op_32(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
     let funct7 = funct7(inst);
@@ -430,6 +438,7 @@ fn decode_op_fp(_inst: u32) -> Result<ExecInternal> {
 /// 1100011 BRANCH: SB type
 fn decode_branch(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
 
@@ -459,6 +468,7 @@ fn decode_branch(inst: u32) -> Result<ExecInternal> {
 /// 1100111 JALR: I type
 fn decode_jalr(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
     exec_internal.inst = match funct3 {
@@ -480,6 +490,7 @@ fn decode_jalr(inst: u32) -> Result<ExecInternal> {
 /// 1101111 JAL: UJ type
 fn decode_jal(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     exec_internal.inst = Inst64::jal;
     exec_internal.rd = rd(inst);
@@ -491,6 +502,7 @@ fn decode_jal(inst: u32) -> Result<ExecInternal> {
 /// 1110011 SYSTEM: I type
 fn decode_system(inst: u32) -> Result<ExecInternal> {
     let mut exec_internal = ExecInternal::default();
+    exec_internal.raw_inst = inst;
 
     let funct3 = funct3(inst);
     let csr = imm_I(inst);

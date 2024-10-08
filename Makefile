@@ -19,13 +19,19 @@ else
 	MTRACE =
 endif
 
+ifeq ($(FT), enable)
+	FTRACE = --ftrace
+else
+	FTRACE =
+endif
+
 all:
 	@echo "-------Build Simulator-------"
 	@$(CARGO) build --release
 	@echo "-------Build Test-------"
 	@$(MAKE) -C test T=$(T)
 	@echo "-------Start Simulation-------"
-	$(SIM) $(DEBUG) $(ITRACE) $(MTRACE) -i ./test/build/$(T).elf
+	$(SIM) $(DEBUG) $(ITRACE) $(MTRACE) $(FTRACE) -i ./test/build/$(T).elf
 
 RUST_SRC := src
 RUST_SRC_FILES := $(wildcard $(RUST_SRC)/*.rs)

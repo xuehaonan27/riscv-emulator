@@ -335,6 +335,7 @@ macro_rules! pinst {
 }
 
 pub struct ExecInternal {
+    pub raw_inst: u32,
     pub inst: Inst64,
     pub rs1: u8,   // source register 1 index
     pub rs2: u8,   // source register 2 index
@@ -350,6 +351,7 @@ pub struct ExecInternal {
 impl Default for ExecInternal {
     fn default() -> Self {
         ExecInternal {
+            raw_inst: 0,
             inst: Inst64::unknown,
             rs1: 0,
             rs2: 0,

@@ -8,14 +8,7 @@ use std::{
 use log::{error, info, trace};
 
 use crate::{
-    check,
-    decode::decode,
-    elf::LoadElfInfo,
-    error::{Error, Exception, Result},
-    insts::ExecInternal,
-    pinst,
-    reg::{ProgramCounter, RegisterFile, REGNAME},
-    vm::VirtualMemory,
+    callstack::CallStack, check, decode::decode, elf::LoadElfInfo, error::{Error, Exception, Result}, insts::ExecInternal, pinst, reg::{ProgramCounter, RegisterFile, REGNAME}, vm::VirtualMemory
 };
 
 pub struct CPU<'a> {
@@ -28,15 +21,18 @@ pub struct CPU<'a> {
     // Program counter (PC) which is not included in general purpose register file.
     pc: ProgramCounter,
 
-    // Atomic reference to virtual memory
+    // Reference to virtual memory
     vm: &'a mut VirtualMemory,
+
+    // Reference to call stack
+    callstack: &'a mut CallStack<'a>,
 
     // Itrace switch
     itrace: bool,
 }
 
 impl<'a> CPU<'a> {
-    pub fn new(vm: &'a mut VirtualMemory, itrace: bool) -> CPU<'a> {
+    pub fn new(vm: &'a mut VirtualMemory, callstack: &'a mut CallStack<'a>, itrace: bool) -> CPU<'a> {
         // x0 already set to 0
         let reg_file = RegisterFile::empty();
         let pc = ProgramCounter::new();
@@ -46,6 +42,7 @@ impl<'a> CPU<'a> {
             reg_file,
             pc,
             vm,
+            callstack,
             itrace,
         }
     }
@@ -332,12 +329,22 @@ impl<'a> CPU<'a> {
                 }
                 reg_file.write(rd, pc + 4); // rd default to x1
                 exec_itrnl.pc = pc.wrapping_add(sext(imm, J_TYPE_IMM_BITWIDTH) as u64);
+                if self.callstack.ftrace {
+                    let target_pc = exec_itrnl.pc;
+                    // info!("target_pc: {target_pc:#x}");
+                    self.callstack.call(pc, target_pc);
+                }
                 use_new_pc = true;
             }
             Inst64::jalr => {
                 // I t=pc+4; pc=(x[rs1]+sext(offset))&∼1; x[rd]=t
                 if self.itrace {
                     trace!("{}", pinst!(pc, jalr, rd, imm(rs1)));
+                }
+                if self.callstack.ftrace {
+                    if exec_itrnl.raw_inst == 0x00008067 {
+                        self.callstack.ret(pc);
+                    }
                 }
                 exec_itrnl.pc = src1.wrapping_add(sext(imm, I_TYPE_IMM_BITWIDTH) as u64) & (!1);
                 reg_file.write(rd, pc + 4); // rd default to x1

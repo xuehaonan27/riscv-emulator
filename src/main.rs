@@ -1,5 +1,6 @@
 use std::path;
 
+use callstack::CallStack;
 use clap::Parser;
 use cpu::CPU;
 use debug::REDB;
@@ -8,6 +9,7 @@ use log::info;
 use vm::VirtualMemory;
 
 mod alu;
+mod callstack;
 mod cpu;
 mod debug;
 mod decode;
@@ -36,6 +38,10 @@ struct Args {
     /// Enable mtrace.
     #[arg(long)]
     mtrace: bool,
+
+    /// Enable ftrace.
+    #[arg(long)]
+    ftrace: bool,
 }
 
 fn main() {
@@ -48,6 +54,7 @@ fn main() {
     let enable_debug_mode = args.debug;
     let itrace = args.itrace;
     let mtrace = args.mtrace;
+    let ftrace = args.ftrace;
     info!("Loading file: {file_path:?}");
 
     // Parse ELF file
@@ -56,7 +63,10 @@ fn main() {
     // Load the file into virtual memory
     let mut vm = VirtualMemory::from_elf_info(&elf_info, mtrace);
 
-    let mut cpu = CPU::new(&mut vm, itrace);
+    // Create call stack for the running process on the CPU
+    let mut callstack = CallStack::from_elf_info(&elf_info, ftrace);
+
+    let mut cpu = CPU::new(&mut vm, &mut callstack, itrace);
 
     cpu.init_elfinfo_64(&elf_info);
 
