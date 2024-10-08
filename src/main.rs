@@ -32,6 +32,10 @@ struct Args {
     /// Enable itrace.
     #[arg(long)]
     itrace: bool,
+
+    /// Enable mtrace.
+    #[arg(long)]
+    mtrace: bool,
 }
 
 fn main() {
@@ -43,13 +47,14 @@ fn main() {
     let file_path = path::PathBuf::from(&args.input);
     let enable_debug_mode = args.debug;
     let itrace = args.itrace;
+    let mtrace = args.mtrace;
     info!("Loading file: {file_path:?}");
 
     // Parse ELF file
     let elf_info = read_elf(&file_path).expect("Fail to load ELF");
 
     // Load the file into virtual memory
-    let mut vm = VirtualMemory::from_elf_info(&elf_info);
+    let mut vm = VirtualMemory::from_elf_info(&elf_info, mtrace);
 
     let mut cpu = CPU::new(&mut vm, itrace);
 

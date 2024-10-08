@@ -1,4 +1,9 @@
-use std::ptr::{read_volatile, write_volatile};
+use std::{
+    fmt::Display,
+    ptr::{read_volatile, write_volatile},
+};
+
+use log::trace;
 
 use crate::elf::LoadElfInfo;
 
@@ -10,15 +15,17 @@ const STACK_SIZE: usize = 8 * 1024 * 1024; // 8 MiB, for the stack
 pub struct VirtualMemory {
     ld_start: usize, // vaddr where the code starts
     mm: Vec<u8>,
+    mtrace: bool,
 }
 
 impl VirtualMemory {
-    pub fn new(size: usize) -> VirtualMemory {
+    pub fn new(size: usize, mtrace: bool) -> VirtualMemory {
         let mut mm = Vec::with_capacity(size);
         mm.resize(size, 0);
         VirtualMemory {
             ld_start: 0, // default to 0, but usually not what the case is.
             mm,
+            mtrace,
         }
     }
 
@@ -27,12 +34,12 @@ impl VirtualMemory {
         self.mm.clear();
     }
 
-    pub fn from_elf_info(info: &LoadElfInfo) -> VirtualMemory {
+    pub fn from_elf_info(info: &LoadElfInfo, mtrace: bool) -> VirtualMemory {
         let prog_size = (info.max_vaddr() - info.min_vaddr()) as usize;
 
         let tot_size = prog_size + PROTECT_SIZE + STACK_SIZE;
 
-        let mut vm = VirtualMemory::new(tot_size);
+        let mut vm = VirtualMemory::new(tot_size, mtrace);
         vm.ld_start = info.min_vaddr();
         // debug!("vm.ld_start = {:#x}", vm.ld_start);
 
@@ -58,10 +65,21 @@ impl VirtualMemory {
         unsafe { read_volatile(mem_0.add(pos) as *const T) }
     }
 
+    // Internal implementation for mread.
+    #[inline(always)]
+    fn _mread<T: Sized>(&self, vaddr: usize) -> T {
+        self.host_read(vaddr - self.ld_start)
+    }
+
     /// Read a value from a virtual memory address.
     #[inline(always)]
-    pub fn mread<T: Sized>(&self, vaddr: usize) -> T {
-        self.host_read(vaddr - self.ld_start)
+    pub fn mread<T: Sized + Display>(&self, vaddr: usize) -> T {
+        // self.host_read(vaddr - self.ld_start)
+        let ret = self._mread::<T>(vaddr);
+        if self.mtrace {
+            trace!("mread {:#x}\t{}", vaddr, ret);
+        }
+        ret
     }
 
     /// Write a value into a position
@@ -72,9 +90,34 @@ impl VirtualMemory {
         unsafe { write_volatile(mem_0.add(pos) as *mut T, value) };
     }
 
+    // Internal implementation for mread.
+    #[inline(always)]
+    fn _mwrite<T: Sized>(&mut self, vaddr: usize, value: T) {
+        self.host_write(vaddr - self.ld_start, value);
+    }
+
     /// Write a value into a virtual memory address.
     #[inline(always)]
-    pub fn mwrite<T: Sized>(&mut self, vaddr: usize, value: T) {
-        self.host_write(vaddr - self.ld_start, value);
+    pub fn mwrite<T: Sized + Display>(&mut self, vaddr: usize, value: T) {
+        // self.host_write(vaddr - self.ld_start, value);
+        if self.mtrace {
+            trace!("mwrite {:#x}\t{}", vaddr, value);
+        }
+        self._mwrite::<T>(vaddr, value);
+    }
+
+    /// Fetch instruction from memory.
+    /// T should be u32 or u16 (C-extension)
+    #[inline(always)]
+    pub fn fetch_inst<T: Sized>(&self, pc: usize) -> T {
+        let type_name = std::any::type_name::<T>();
+        let type_u32 = std::any::type_name::<u32>();
+        let type_u16 = std::any::type_name::<u16>();
+        assert!(
+            type_name == type_u32 || type_name == type_u16,
+            "T must be either u32 or u16, but got {}",
+            type_name
+        );
+        self._mread::<T>(pc)
     }
 }

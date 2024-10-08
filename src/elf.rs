@@ -106,6 +106,13 @@ pub fn read_elf(path: &PathBuf) -> Result<LoadElfInfo> {
     }
     */
 
+    // Symbol table
+    for sym in elf.syms.iter() {
+        if let Some(name) = elf.strtab.get_at(sym.st_name) {
+            info!("Symbol: {}, address: {:#x}", name, sym.st_value);
+        }
+    }
+
     // Validity check
     if elf.header.e_machine != header::EM_RISCV {
         let msg = format!(

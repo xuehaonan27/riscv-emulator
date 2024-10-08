@@ -1,6 +1,9 @@
 //! Mono-core CPU
 
-use std::ops::{BitAnd, BitOr, BitXor};
+use std::{
+    fmt::Display,
+    ops::{BitAnd, BitOr, BitXor},
+};
 
 use log::{error, info, trace};
 
@@ -97,7 +100,7 @@ impl<'a> CPU<'a> {
 
     pub fn fetch_inst(&mut self, pc: u64) -> u32 {
         check!(pc != 0, "PC is zero.");
-        self.vm.mread(pc as usize)
+        self.vm.fetch_inst(pc as usize)
     }
 
     /// Simulate 5-stage in-order CPU
@@ -918,7 +921,7 @@ impl<'a> CPU<'a> {
         info!("Program ended at pc {:#x}, with exit code {}", pc, code);
     }
 
-    pub fn mread<T>(&self, vaddr: u64) -> T {
+    pub fn mread<T: Sized + Display>(&self, vaddr: u64) -> T {
         self.vm.mread(vaddr as usize)
     }
 }
