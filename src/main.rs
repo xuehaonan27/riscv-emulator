@@ -73,8 +73,8 @@ fn main() {
     if !enable_debug_mode {
         cpu.cpu_exec(None).expect("Failed to execute the program");
     } else {
-        let mut redb = REDB::new();
-        redb.run(&mut cpu);
+        let mut redb = REDB::new(&mut cpu);
+        redb.run();
     }
 
     // Atomatically drop all resources

@@ -7,9 +7,12 @@ use crate::error::{Error, Result};
 
 const REDB_BUF_SIZE: usize = 64;
 
-pub struct REDB {
+pub struct REDB<'a> {
     // Command line input buffer
     buf: String,
+
+    // CPU
+    cpu: &'a mut CPU<'a>
 }
 
 #[derive(Parser, Debug)]
@@ -45,14 +48,15 @@ enum Commands {
     Backtrace,
 }
 
-impl REDB {
-    pub fn new() -> REDB {
+impl<'a> REDB<'a> {
+    pub fn new(cpu: &'a mut CPU<'a>) -> REDB {
         REDB {
             buf: String::with_capacity(REDB_BUF_SIZE),
+            cpu,
         }
     }
 
-    pub fn run(&mut self, cpu: &mut CPU) {
+    pub fn run(&mut self) {
         loop {
             print!("(REDB)>>> ");
             io::stdout().flush().expect("Fail to flush");
@@ -68,7 +72,7 @@ impl REDB {
             }
             match cmd.unwrap() {
                 Commands::H => print_help_info(),
-                Commands::Continue => match cpu.cpu_exec(None) {
+                Commands::Continue => match self.cpu.cpu_exec(None) {
                     Ok(_) => {
                         println!("REDB: CPU executed to end.");
                         break;
@@ -88,7 +92,7 @@ impl REDB {
                     }
                     println!("REDB: execute {n} steps");
                     for i in 1..=n {
-                        if let Err(e) = cpu.exec_once() {
+                        if let Err(e) = self.cpu.exec_once() {
                             println!("REDB: stopped after executed {i} steps");
                             println!("{e}");
                             break;
@@ -100,7 +104,7 @@ impl REDB {
                     if r == "r" {
                         for i in 0..32 {
                             let reg_name = format!("x{i}");
-                            let reg = cpu.reg_val_by_name(&reg_name).unwrap();
+                            let reg = self.cpu.reg_val_by_name(&reg_name).unwrap();
                             println!(
                                 "{} ({}) \t: {}\t{:#x}",
                                 reg_name,
@@ -109,10 +113,10 @@ impl REDB {
                                 reg
                             );
                         }
-                        let pc = cpu.pc();
+                        let pc = self.cpu.pc();
                         println!("{}\t\t: {}\t{:#x}", "pc", pc, pc);
                     } else {
-                        match cpu.reg_val_by_name(&r) {
+                        match self.cpu.reg_val_by_name(&r) {
                             Ok(reg) => {
                                 println!("{}\t: {}\t{:#x}", r, reg, reg);
                             }
@@ -125,13 +129,13 @@ impl REDB {
                 Commands::Scan { n, vaddr } => {
                     for i in 0..n {
                         let p_vaddr = vaddr + 4 * i;
-                        let val = cpu.mread::<u64>(p_vaddr);
+                        let val = self.cpu.mread::<u64>(p_vaddr);
                         println!("{:#x}: {:016x}", p_vaddr, val);
                     }
                 }
                 Commands::Backtrace => {
                     println!("REDB: backtrace");
-                    cpu.backtrace()
+                    self.cpu.backtrace()
                 }
             }
         }
