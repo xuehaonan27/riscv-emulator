@@ -49,7 +49,7 @@ $(FILE_NAMES):
 	@echo "-------Build Test $@-------"
 	@$(MAKE) -C test T=$@
 	@echo "-------Start Simulation-------"
-	-@$(SIM) $(ITRACE) -i ./test/build/$@.elf
+	-@$(SIM) -i ./test/build/$@.elf
 
 
 clean:

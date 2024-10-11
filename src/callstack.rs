@@ -42,11 +42,13 @@ impl<'a> CallStack<'a> {
     pub fn ret(&mut self, pc: u64) {
         if let Some((_, func_name)) = self.call_stack.pop_back() {
             let len = self.call_stack.len();
-            trace!(
-                "{:x}:{} ret [{func_name}]",
-                pc,
-                iter::repeat(' ').take(len).collect::<String>()
-            );
+            if self.ftrace {
+                trace!(
+                    "{:x}:{} ret [{func_name}]",
+                    pc,
+                    iter::repeat(' ').take(len).collect::<String>()
+                );
+            }
         }
     }
 
