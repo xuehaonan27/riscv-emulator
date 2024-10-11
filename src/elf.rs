@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fs, ops::Range, path::PathBuf};
 
 use goblin::elf::{header, program_header, Elf};
-use log::{error, info};
+use log::error;
 
 use crate::error::{Error, Result};
 
@@ -116,7 +116,7 @@ pub fn read_elf(path: &PathBuf) -> Result<LoadElfInfo> {
     for sym in elf.syms.iter() {
         if let Some(name) = elf.strtab.get_at(sym.st_name) {
             // maybe we could add elf-trace?
-            info!("Symbol: {}, address: {:#x}", name, sym.st_value);
+            // info!("Symbol: {}, address: {:#x}", name, sym.st_value);
             symbol_map.insert(sym.st_value, name.to_string());
         }
     }
@@ -134,10 +134,10 @@ pub fn read_elf(path: &PathBuf) -> Result<LoadElfInfo> {
 
     // Bits check
     let is_64_bit = elf.is_64;
-    info!(
-        "ELF file {path:?} is {} bit",
-        if is_64_bit { "64" } else { "32" }
-    );
+    // info!(
+    //     "ELF file {path:?} is {} bit",
+    //     if is_64_bit { "64" } else { "32" }
+    // );
 
     // entry point
     let entry_point = elf.header.e_entry;
