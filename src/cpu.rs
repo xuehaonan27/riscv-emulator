@@ -10,6 +10,7 @@ use log::{error, info, trace};
 use crate::{
     callstack::CallStack,
     check,
+    csr::{MModeRegFile, Mcause, PrivilegeLevel, SModeRegFile},
     decode::decode,
     elf::LoadElfInfo,
     error::{Error, Exception, Result},
@@ -28,6 +29,15 @@ pub struct CPU<'a> {
 
     // Program counter (PC) which is not included in general purpose register file.
     pc: ProgramCounter,
+
+    // Machine mode control status register file
+    mcsr_file: MModeRegFile,
+
+    // Supervisor mode control status register file
+    scsr_file: SModeRegFile,
+
+    // CPU privilege level
+    privilege: PrivilegeLevel,
 
     // Reference to virtual memory
     vm: &'a mut VirtualMemory,
@@ -56,6 +66,9 @@ impl<'a> CPU<'a> {
             vm,
             callstack,
             itrace,
+            mcsr_file: MModeRegFile::empty(),
+            scsr_file: SModeRegFile::empty(),
+            privilege: PrivilegeLevel::User,
         }
     }
 
@@ -105,6 +118,36 @@ impl<'a> CPU<'a> {
         // Write Back
 
         Ok(())
+    }
+
+    /// When a HART got exception, HART should do this atomically.
+    pub fn handle_exception(&mut self, trigger_pc: u64, nxt_pc: u64, mcause: Mcause, mtval: u64) {
+        // Save PC to mepc
+        self.mcsr_file.mepc.write(trigger_pc);
+
+        // Set PC according to mtvec
+        let mode = self.mcsr_file.mtvec.mode();
+        let base = self.mcsr_file.mtvec.base();
+        let cause = mcause.exception(); // get exception number
+        let new_pc = if mode == 0 {
+            base
+        } else if mode == 1 && {
+            base + 4 * cause
+        } else {
+            unreachable!("mode should be 0 or 1");
+        };
+        self.pc.write(new_pc);
+
+        // Write exception cause into mcause
+        self.mcsr_file.mcause.write(mcause);
+
+        // Write other relative information into mtval
+        self.mcsr_file.mtval.write(mtval);
+
+        // Clear mstatus.MIE and save MIE into MPIE
+        self.mcsr_file.mstatus.mie2mpie_and_clear();
+
+        self.mcsr_file.mstatus.mpp_set(PrivilegeLevel::Machine);
     }
 
     pub fn fetch_inst(&mut self, pc: u64) -> u32 {
@@ -450,7 +493,10 @@ impl<'a> CPU<'a> {
                 if self.itrace {
                     trace!("{}", pinst!(pc, mret));
                 }
-                todo!()
+                exec_itrnl.pc = self.mcsr_file.mepc.read();
+                use_new_pc = true;
+                self.mcsr_file.mstatus.mpie2mie();
+                self.privilege = self.mcsr_file.mstatus.mpp();
             }
             Inst64::mul => {
                 // R x[rd] = x[rs1] × x[rs2]

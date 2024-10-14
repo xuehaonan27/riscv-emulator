@@ -19,6 +19,7 @@ mod insts;
 mod logger;
 mod reg;
 mod vm;
+mod csr;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about)]

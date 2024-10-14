@@ -21,10 +21,16 @@ pub enum Error {
 /// CPU raised exceptions
 #[derive(Debug, thiserror::Error)]
 pub enum Exception {
+    
     #[error("DividedByZero")]
     DividedByZero,
+    #[error("Breakpoint")]
+    Breakpoint,
+    /// Illegal instruction
     #[error("IllegalInstruction")]
     IllegalInstruction,
+    #[error("UnalignedAddress")]
+    UnalignedAddress,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
