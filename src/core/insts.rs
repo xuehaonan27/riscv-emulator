@@ -257,7 +257,12 @@ macro_rules! pinst {
         format!("{:8x}:\t{}", $pc, stringify!($inst))
     };
     ($pc:ident, $inst:tt, $t1:ident) => {
-        format!("{:8x}:\t{}\t{}", $pc, stringify!($inst), REGNAME[$t1 as usize])
+        format!(
+            "{:8x}:\t{}\t{}",
+            $pc,
+            stringify!($inst),
+            REGNAME[$t1 as usize]
+        )
     };
     ($pc:ident, $inst:tt, $t1:ident, $t2:ident) => {
         format!(

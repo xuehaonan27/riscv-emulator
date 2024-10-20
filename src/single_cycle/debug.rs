@@ -1,9 +1,8 @@
+use super::cpu::{reg_name_by_id, CPU};
+use crate::error::{Error, Result};
 use clap::{Parser, Subcommand};
 use clap_num::maybe_hex;
 use std::io::{self, BufRead, Write};
-
-use crate::cpu::{reg_name_by_id, CPU};
-use crate::error::{Error, Result};
 
 const REDB_BUF_SIZE: usize = 64;
 
@@ -12,7 +11,7 @@ pub struct REDB<'a> {
     buf: String,
 
     // CPU
-    cpu: &'a mut CPU<'a>
+    cpu: &'a mut CPU<'a>,
 }
 
 #[derive(Parser, Debug)]

@@ -10,13 +10,13 @@ use log::{error, info, trace};
 use crate::{
     callstack::CallStack,
     check,
-    decode::decode,
+    core::decode::decode,
+    core::insts::ExecInternal,
+    core::reg::{ProgramCounter, RegisterFile, REGNAME},
+    core::vm::VirtualMemory,
     elf::LoadElfInfo,
     error::{Error, Exception, Result},
-    insts::ExecInternal,
     pinst,
-    reg::{ProgramCounter, RegisterFile, REGNAME},
-    vm::VirtualMemory,
 };
 
 pub struct CPU<'a> {
@@ -131,7 +131,7 @@ impl<'a> CPU<'a> {
 impl<'a> CPU<'a> {
     /// Instruction level simulation
     pub fn exec_inst(&mut self, mut exec_itrnl: ExecInternal) -> Result<()> {
-        use crate::insts::Inst64;
+        use crate::core::insts::Inst64;
         // get pc
         exec_itrnl.pc = self.pc.read();
         let pc = exec_itrnl.pc; // read pc into intermediate register

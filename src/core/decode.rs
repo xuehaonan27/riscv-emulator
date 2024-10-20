@@ -1,6 +1,6 @@
 //! Decode phase
+use crate::core::insts::*;
 use crate::error::{Error, Result};
-use crate::insts::*;
 use log::error;
 
 /// Decode phase.
@@ -14,7 +14,7 @@ use log::error;
 /// SB: BRANCH
 /// ```
 pub fn decode(inst: u32) -> Result<ExecInternal> {
-    use crate::insts::inst_64_opcode::*;
+    use crate::core::insts::inst_64_opcode::*;
     // Format
     let opcode = opcode(inst);
 

@@ -1,24 +1,18 @@
-use std::path;
-
 use callstack::CallStack;
 use clap::Parser;
-use cpu::CPU;
-use debug::REDB;
+use core::vm::VirtualMemory;
 use elf::read_elf;
 use log::info;
-use vm::VirtualMemory;
+use single_cycle::cpu::CPU;
+use single_cycle::debug::REDB;
+use std::path;
 
-mod alu;
 mod callstack;
-mod cpu;
-mod debug;
-mod decode;
+mod core;
 mod elf;
 mod error;
-mod insts;
 mod logger;
-mod reg;
-mod vm;
+mod single_cycle;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about)]
