@@ -10,7 +10,6 @@ use log::{error, info, trace};
 use crate::{
     callstack::CallStack,
     check,
-    core::decode::decode,
     core::insts::ExecInternal,
     core::reg::{ProgramCounter, RegisterFile, REGNAME},
     core::vm::VirtualMemory,
@@ -18,6 +17,8 @@ use crate::{
     error::{Error, Exception, Result},
     pinst,
 };
+
+use super::decode::decode;
 
 pub struct CPU<'a> {
     // indicate whether the CPU is running
