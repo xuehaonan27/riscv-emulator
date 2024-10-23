@@ -1,10 +1,8 @@
 use callstack::CallStack;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use core::vm::VirtualMemory;
 use elf::read_elf;
 use log::info;
-use single_cycle::cpu::CPU;
-use single_cycle::debug::REDB;
 use std::path;
 
 mod callstack;
@@ -12,6 +10,7 @@ mod core;
 mod elf;
 mod error;
 mod logger;
+mod multi_stage;
 mod single_cycle;
 
 #[derive(Parser, Debug)]
@@ -20,6 +19,10 @@ struct Args {
     /// Path to the program to be loaded
     #[arg(short, long)]
     input: String,
+
+    /// CPU mode
+    #[arg(short, long)]
+    cpu_mode: CPUMode,
 
     /// Enable debug mode. Not set to enable batch mode.
     #[arg(short, long)]
@@ -38,6 +41,13 @@ struct Args {
     ftrace: bool,
 }
 
+#[derive(Debug, Clone, ValueEnum)]
+enum CPUMode {
+    Single,
+    Multi,
+    Pipeline,
+}
+
 fn main() {
     // log4rs::init_file("config/log4rs.yaml", Default::default())
     //     .expect("Fail to load logger configuration");
@@ -49,6 +59,7 @@ fn main() {
     let itrace = args.itrace;
     let mtrace = args.mtrace;
     let ftrace = args.ftrace;
+    let cpu_mode = args.cpu_mode;
     info!("Loading file: {file_path:?}");
 
     // Parse ELF file
@@ -60,15 +71,29 @@ fn main() {
     // Create call stack for the running process on the CPU
     let mut callstack = CallStack::from_elf_info(&elf_info, ftrace);
 
-    let mut cpu = CPU::new(&mut vm, &mut callstack, itrace);
+    match cpu_mode {
+        CPUMode::Single => {
+            use single_cycle::{cpu::CPU, debug::REDB};
+            let mut cpu = CPU::new(&mut vm, &mut callstack, itrace);
 
-    cpu.init_elfinfo_64(&elf_info);
+            cpu.init_elfinfo_64(&elf_info);
 
-    if !enable_debug_mode {
-        cpu.cpu_exec(None).expect("Failed to execute the program");
-    } else {
-        let mut redb = REDB::new(&mut cpu);
-        redb.run();
+            if !enable_debug_mode {
+                cpu.cpu_exec(None).expect("Failed to execute the program");
+            } else {
+                let mut redb = REDB::new(&mut cpu);
+                redb.run();
+            }
+        }
+        CPUMode::Multi => {}
+        CPUMode::Pipeline => {
+            use multi_stage::cpu::CPU;
+            let mut cpu = CPU::new(&mut vm, &mut callstack, itrace);
+
+            cpu.init_elfinfo_64(&elf_info);
+
+            cpu.cpu_exec(None).expect("Failed to execute the program");
+        }
     }
 
     // Atomatically drop all resources

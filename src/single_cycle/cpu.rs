@@ -10,9 +10,11 @@ use log::{error, info, trace};
 use crate::{
     callstack::CallStack,
     check,
-    core::insts::ExecInternal,
-    core::reg::{ProgramCounter, RegisterFile, REGNAME},
-    core::vm::VirtualMemory,
+    core::{
+        insts::*,
+        reg::{ProgramCounter, RegisterFile, REGNAME},
+        vm::VirtualMemory,
+    },
     elf::LoadElfInfo,
     error::{Error, Exception, Result},
     pinst,
@@ -651,7 +653,7 @@ impl<'a> CPU<'a> {
                 reg_file.write(rd, write_val);
             }
             Inst64::slti => {
-                // I x[rd] = x[rs1] <u sext(immediate)
+                // I x[rd] = x[rs1] <s sext(immediate)
                 if self.itrace {
                     trace!("{}", pinst!(pc, slti, rd, rs1, imm=>imm));
                 }
@@ -669,7 +671,7 @@ impl<'a> CPU<'a> {
                 reg_file.write(rd, write_val);
             }
             Inst64::sltu => {
-                // R x[rd] = x[rs1] <s x[rs2]
+                // R x[rd] = x[rs1] <u x[rs2]
                 if self.itrace {
                     trace!("{}", pinst!(pc, sltu, rd, rs1, rs2));
                 }
@@ -811,7 +813,7 @@ impl<'a> CPU<'a> {
                 let vaddr = src1.wrapping_add(sext(imm, S_TYPE_IMM_BITWIDTH) as u64);
                 let write_val = trunc_to_32_bit(src2);
                 self.vm.mwrite::<u32>(vaddr as usize, write_val as u32);
-                self.vm.mread::<u64>(vaddr as usize);
+                // self.vm.mread::<u64>(vaddr as usize);
             }
 
             Inst64::xor => {
@@ -843,92 +845,6 @@ impl<'a> CPU<'a> {
 
         Ok(())
     }
-}
-
-const BYTE_BITWIDTH: u8 = 8;
-const HALF_BITWIDTH: u8 = 16;
-const WORD_BITWIDTH: u8 = 32;
-
-const I_TYPE_IMM_BITWIDTH: u8 = 12; // imm[11:0]
-const S_TYPE_IMM_BITWIDTH: u8 = 12; // imm[11:5] imm[4:0]
-const B_TYPE_IMM_BITWIDTH: u8 = 13; // imm[12|10:5] imm[4:1|11]
-const U_TYPE_IMM_BITWIDTH: u8 = 20; // imm[31:12]
-const J_TYPE_IMM_BITWIDTH: u8 = 21; // imm[20|10:1|11|19:12]
-
-/// Signed-extent to 64 bit.
-/// Immediate number could be 12-bit, 13-bit, 20-bit, 21bit.
-pub fn sext(imm: u64, bit_width: u8) -> i64 {
-    assert!(bit_width < 64, "bit_width too long");
-    // Suppose bit_width = 5. Highest bit is sign-bit.
-    // Numbers for example
-    // Signed Imm:   00011101
-    // Unsigned Imm: 00001101
-
-    // Sign bit mask.
-    // 00010000
-    let sign_bit_mask: i64 = 1 << (bit_width - 1);
-
-    // Mask for the immediate.  Typed as i64 to perform 2-complement substraction.
-    // 00011111
-    let mask: i64 = (1i64 << bit_width) - 1;
-
-    // Get sign-bit for imm.
-    // Signed Imm:   00011101 => 00010000
-    // Unsigned Imm: 00001101 => 00000000
-    let sign_bit: i64 = (imm as i64) & sign_bit_mask;
-
-    // Get extended bits.
-    // Signed Imm:   00010000 => 00100000 => 00011111 => 11100000
-    // Unsigned Imm: 00000000 => 00000000 => 11111111 => 00000000
-    let extended_bits: i64 = !((sign_bit << 1) - 1);
-
-    // Final result.
-    // Signed Imm:   00011101 | 11100000 => 11111101
-    // Unsigned Imm: 00001101 | 00000000 => 00001101
-    ((imm as i64) & mask) | extended_bits
-}
-
-#[inline(always)]
-pub fn trunc_to_32_bit(x: u64) -> u64 {
-    const MASK: u64 = 0x00000000_FFFFFFFF;
-    x & MASK
-}
-
-#[inline(always)]
-pub fn trunc_to_16_bit(x: u64) -> u64 {
-    const MASK: u64 = 0x00000000_0000FFFF;
-    x & MASK
-}
-
-#[inline(always)]
-pub fn trunc_to_8_bit(x: u64) -> u64 {
-    const MASK: u64 = 0x00000000_000000FF;
-    x & MASK
-}
-
-#[inline(always)]
-pub fn trunc_to_6_bit(x: u64) -> u64 {
-    const MASK: u64 = 0x00000000_0000003F;
-    x & MASK
-}
-
-#[inline(always)]
-pub fn trunc_to_5_bit(x: u64) -> u64 {
-    const MASK: u64 = 0x00000000_0000001F;
-    x & MASK
-}
-
-#[inline(always)]
-pub fn trunc_to_5_bit_and_check(x: u64) -> (u64, bool) {
-    const MASK: u64 = 0x00000000_0000001F;
-    const LEGAL_MASK: u64 = 0x00000000_00000020;
-    (x & MASK, (x & LEGAL_MASK) == 0)
-}
-
-#[inline(always)]
-pub fn get_high_64_bit(x: u128) -> u64 {
-    const MASK: u128 = 0xFFFFFFFF_FFFFFFFF_00000000_00000000;
-    ((x & MASK) >> 64) as u64
 }
 
 impl<'a> CPU<'a> {
@@ -995,48 +911,6 @@ impl<'a> CPU<'a> {
         };
         Ok(self.reg_file.read(idx))
     }
-}
-
-pub fn reg_name_by_id(idx: u8) -> Result<&'static str> {
-    Ok(match idx {
-        0 => "zero",
-        1 => "ra",
-        2 => "sp",
-        3 => "gp",
-        4 => "tp",
-        5 => "t0",
-        6 => "t1",
-        7 => "t2",
-        8 => "s0",
-        9 => "s1",
-        10 => "a0",
-        11 => "a1",
-        12 => "a2",
-        13 => "a3",
-        14 => "a4",
-        15 => "a5",
-        16 => "a6",
-        17 => "a7",
-        18 => "s2",
-        19 => "s3",
-        20 => "s4",
-        21 => "s5",
-        22 => "s6",
-        23 => "s7",
-        24 => "s8",
-        25 => "s9",
-        26 => "s10",
-        27 => "s11",
-        28 => "t3",
-        29 => "t4",
-        30 => "t5",
-        31 => "t6",
-        _ => {
-            return Err(Error::InvalidRegName(
-                "Register idx must between 0 and 31(including)".into(),
-            ))
-        }
-    })
 }
 
 #[cfg(test)]

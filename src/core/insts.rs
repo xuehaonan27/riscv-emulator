@@ -160,9 +160,9 @@ pub enum Inst64Format {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Inst64 {
-    unknown,
+    noop,
 
     add,
     addi,
@@ -329,7 +329,7 @@ macro_rules! pinst {
     // MEM
     ($pc:ident, $inst:tt, $t1:ident, $imm:ident($t2:ident)) => {
         format!(
-            "{:8x}:\t{}\t{},{:x}({})",
+            "{:8x}:\t{}\t{},{}({})",
             $pc,
             stringify!($inst),
             REGNAME[$t1 as usize],
@@ -357,7 +357,7 @@ impl Default for ExecInternal {
     fn default() -> Self {
         ExecInternal {
             raw_inst: 0,
-            inst: Inst64::unknown,
+            inst: Inst64::noop,
             rs1: 0,
             rs2: 0,
             rs3: 0,
@@ -369,6 +369,92 @@ impl Default for ExecInternal {
             src3: 0,
         }
     }
+}
+
+pub const BYTE_BITWIDTH: u8 = 8;
+pub const HALF_BITWIDTH: u8 = 16;
+pub const WORD_BITWIDTH: u8 = 32;
+
+pub const I_TYPE_IMM_BITWIDTH: u8 = 12; // imm[11:0]
+pub const S_TYPE_IMM_BITWIDTH: u8 = 12; // imm[11:5] imm[4:0]
+pub const B_TYPE_IMM_BITWIDTH: u8 = 13; // imm[12|10:5] imm[4:1|11]
+pub const U_TYPE_IMM_BITWIDTH: u8 = 20; // imm[31:12]
+pub const J_TYPE_IMM_BITWIDTH: u8 = 21; // imm[20|10:1|11|19:12]
+
+/// Signed-extent to 64 bit.
+/// Immediate number could be 12-bit, 13-bit, 20-bit, 21bit.
+pub fn sext(imm: u64, bit_width: u8) -> i64 {
+    assert!(bit_width < 64, "bit_width too long");
+    // Suppose bit_width = 5. Highest bit is sign-bit.
+    // Numbers for example
+    // Signed Imm:   00011101
+    // Unsigned Imm: 00001101
+
+    // Sign bit mask.
+    // 00010000
+    let sign_bit_mask: i64 = 1 << (bit_width - 1);
+
+    // Mask for the immediate.  Typed as i64 to perform 2-complement substraction.
+    // 00011111
+    let mask: i64 = (1i64 << bit_width) - 1;
+
+    // Get sign-bit for imm.
+    // Signed Imm:   00011101 => 00010000
+    // Unsigned Imm: 00001101 => 00000000
+    let sign_bit: i64 = (imm as i64) & sign_bit_mask;
+
+    // Get extended bits.
+    // Signed Imm:   00010000 => 00100000 => 00011111 => 11100000
+    // Unsigned Imm: 00000000 => 00000000 => 11111111 => 00000000
+    let extended_bits: i64 = !((sign_bit << 1) - 1);
+
+    // Final result.
+    // Signed Imm:   00011101 | 11100000 => 11111101
+    // Unsigned Imm: 00001101 | 00000000 => 00001101
+    ((imm as i64) & mask) | extended_bits
+}
+
+#[inline(always)]
+pub fn trunc_to_32_bit(x: u64) -> u64 {
+    const MASK: u64 = 0x00000000_FFFFFFFF;
+    x & MASK
+}
+
+#[inline(always)]
+pub fn trunc_to_16_bit(x: u64) -> u64 {
+    const MASK: u64 = 0x00000000_0000FFFF;
+    x & MASK
+}
+
+#[inline(always)]
+pub fn trunc_to_8_bit(x: u64) -> u64 {
+    const MASK: u64 = 0x00000000_000000FF;
+    x & MASK
+}
+
+#[inline(always)]
+pub fn trunc_to_6_bit(x: u64) -> u64 {
+    const MASK: u64 = 0x00000000_0000003F;
+    x & MASK
+}
+
+#[inline(always)]
+pub fn trunc_to_5_bit(x: u64) -> u64 {
+    const MASK: u64 = 0x00000000_0000001F;
+    x & MASK
+}
+
+#[inline(always)]
+pub fn trunc_to_5_bit_and_check(x: u64) -> (u64, bool) {
+    const MASK: u64 = 0x00000000_0000001F;
+    const LEGAL_MASK: u64 = 0x00000000_00000020;
+    (x & MASK, (x & LEGAL_MASK) == 0)
+}
+
+#[inline(always)]
+pub fn get_high_64_bit(x: u128) -> u64 {
+    const MASK: u128 = 0xFFFFFFFF_FFFFFFFF_00000000_00000000;
+    ((x & MASK) >> 64) as u64
 }
 
 #[cfg(test)]

@@ -1,5 +1,8 @@
-use super::cpu::{reg_name_by_id, CPU};
-use crate::error::{Error, Result};
+use super::cpu::CPU;
+use crate::{
+    core::utils::reg_name_by_id,
+    error::{Error, Result},
+};
 use clap::{Parser, Subcommand};
 use clap_num::maybe_hex;
 use std::io::{self, BufRead, Write};
@@ -107,7 +110,7 @@ impl<'a> REDB<'a> {
                             println!(
                                 "{} ({}) \t: {}\t{:#x}",
                                 reg_name,
-                                reg_name_by_id(i).unwrap(),
+                                reg_name_by_id(i),
                                 reg,
                                 reg
                             );
