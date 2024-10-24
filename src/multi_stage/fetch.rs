@@ -17,13 +17,15 @@ use super::{
 };
 
 /// Fetch instruction
-pub fn fetch(pc: &ProgramCounter, vm: &VirtualMemory) -> InternalFetchDecode {
+pub fn fetch(pc: &ProgramCounter, vm: &VirtualMemory, pipeline_info: bool) -> InternalFetchDecode {
     let pc = pc.read();
     let inst = vm.fetch_inst_pipeline(pc as usize);
 
     inst.and_then(|inst| inst_interpret(pc, inst))
         .map(|itl| {
-            trace!("IF : {}", f_pinst(&itl));
+            if pipeline_info {
+                trace!("IF : {}", f_pinst(&itl));
+            }
             itl
         })
         .unwrap_or_else(|_| InternalFetchDecode::default())

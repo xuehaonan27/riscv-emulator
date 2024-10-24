@@ -10,8 +10,14 @@ use super::{
     phases::{InternalDecodeExec, InternalFetchDecode},
 };
 
-pub fn decode(reg_file: &RegisterFile, itl_f_d: &InternalFetchDecode) -> InternalDecodeExec {
-    trace!("ID : {}", d_pinst(itl_f_d));
+pub fn decode(
+    reg_file: &RegisterFile,
+    itl_f_d: &InternalFetchDecode,
+    pipeline_info: bool,
+) -> InternalDecodeExec {
+    if pipeline_info {
+        trace!("ID : {}", d_pinst(itl_f_d));
+    }
 
     let src1 = reg_file.read(itl_f_d.rs1);
     let src2 = reg_file.read(itl_f_d.rs2);

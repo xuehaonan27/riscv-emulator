@@ -18,19 +18,26 @@ pub fn exec(
     itl_d_e: &InternalDecodeExec,
     ex_mem_forward: u64,
     mem_wb_forward: u64,
+    pipeline_info: bool,
 ) -> Result<(InternalExecMem, bool, bool, u64, u64)> {
     use crate::core::insts::Inst64::*;
-    trace!("EX : {}", e_pinst(itl_d_e));
+    if pipeline_info {
+        trace!("EX : {}", e_pinst(itl_d_e));
+    }
 
     // data forward
     let src1 = match itl_d_e.forward_a {
         0 => itl_d_e.src1,
         0b10 => {
-            warn!("ALU SRC A received data from EX/MEM: {ex_mem_forward}");
+            if pipeline_info {
+                warn!("ALU SRC A received data from EX/MEM: {ex_mem_forward}");
+            }
             ex_mem_forward
         }
         0b01 => {
-            warn!("ALU SRC A received data from MEM/WB: {ex_mem_forward}");
+            if pipeline_info {
+                warn!("ALU SRC A received data from MEM/WB: {ex_mem_forward}");
+            }
             mem_wb_forward
         }
         _ => unreachable!("Data forwarding A"),
@@ -39,11 +46,15 @@ pub fn exec(
     let src2 = match itl_d_e.forward_b {
         0 => itl_d_e.src2,
         0b10 => {
-            warn!("ALU SRC B received data from EX/MEM: {ex_mem_forward}");
+            if pipeline_info {
+                warn!("ALU SRC B received data from EX/MEM: {ex_mem_forward}");
+            }
             ex_mem_forward
         }
         0b01 => {
-            warn!("ALU SRC B received data from MEM/WB: {ex_mem_forward}");
+            if pipeline_info {
+                warn!("ALU SRC B received data from MEM/WB: {ex_mem_forward}");
+            }
             mem_wb_forward
         }
         _ => unreachable!("Data forwarding B"),

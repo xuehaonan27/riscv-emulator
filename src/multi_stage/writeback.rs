@@ -7,13 +7,26 @@ use crate::{
 
 use super::phases::InternalMemWb;
 
-pub fn writeback(itl_m_w: &InternalMemWb, reg_file: &mut RegisterFile) -> bool {
-    trace!("WB : {}", w_pinst(itl_m_w));
+pub fn writeback(
+    itl_m_w: &InternalMemWb,
+    reg_file: &mut RegisterFile,
+    pipeline_info: bool,
+) -> bool {
+    if pipeline_info {
+        trace!("WB : {}", w_pinst(itl_m_w));
+    }
 
     let mem_to_reg = itl_m_w.wb_flags.mem_to_reg;
     if mem_to_reg {
-        let write_val = if itl_m_w.rd != 0 {itl_m_w.regval} else {0};
-        debug!("WB : {:#x} -> REG[{}]({})", itl_m_w.regval, write_val, reg_name_by_id(itl_m_w.rd));
+        let write_val = if itl_m_w.rd != 0 { itl_m_w.regval } else { 0 };
+        if pipeline_info {
+            debug!(
+                "WB : {:#x} -> REG[{}]({})",
+                itl_m_w.regval,
+                write_val,
+                reg_name_by_id(itl_m_w.rd)
+            )
+        };
         reg_file.write(itl_m_w.rd, write_val);
     }
 

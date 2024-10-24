@@ -7,8 +7,14 @@ use crate::{
 
 use super::phases::{InternalExecMem, InternalMemWb};
 
-pub fn mem(itl_e_m: &InternalExecMem, vm: &mut VirtualMemory) -> InternalMemWb {
-    trace!("MEM: {}", m_pinst(itl_e_m));
+pub fn mem(
+    itl_e_m: &InternalExecMem,
+    vm: &mut VirtualMemory,
+    pipeline_info: bool,
+) -> InternalMemWb {
+    if pipeline_info {
+        trace!("MEM: {}", m_pinst(itl_e_m));
+    }
 
     let mem_read = itl_e_m.mem_flags.mem_read;
     let mem_write = itl_e_m.mem_flags.mem_write;
@@ -27,7 +33,9 @@ pub fn mem(itl_e_m: &InternalExecMem, vm: &mut VirtualMemory) -> InternalMemWb {
 
     assert!(!(mem_read & mem_write));
     if mem_read {
-        debug!("MEM.read {:#x}", vaddr);
+        if pipeline_info {
+            debug!("MEM.read {:#x}", vaddr);
+        }
         assert!(!itl_e_m.m2m_forward);
         let result = match mem_bitwidth {
             8 => vm.mread::<u8>(vaddr) as u64,
@@ -46,7 +54,9 @@ pub fn mem(itl_e_m: &InternalExecMem, vm: &mut VirtualMemory) -> InternalMemWb {
         regval = result;
     }
     if mem_write {
-        debug!("MEM.write {:#x} -> M[{:#x}]", regval, vaddr);
+        if pipeline_info {
+            debug!("MEM.write {:#x} -> M[{:#x}]", regval, vaddr);
+        }
         match mem_bitwidth {
             8 => vm.mwrite::<u8>(vaddr, regval as u8),
             16 => vm.mwrite::<u16>(vaddr, regval as u16),

@@ -98,6 +98,24 @@ pub struct CPU<'a> {
     // Mem / Wb
     itl_m_w: InternalMemWb,
 
+    // Pre-execution pipeline register info
+    pre_pipeline_info: bool,
+
+    // Pipeline info
+    pipeline_info: bool,
+
+    // Post-execution pipeline register info
+    post_pipeline_info: bool,
+
+    // Control hazard info
+    control_hazard_info: bool,
+
+    // Data hazard info
+    data_hazard_info: bool,
+
+    // Clock info
+    clock_info: bool,
+
     // HazardResolveUnit
     hazard_detection_unit: HazardDetectionUnit,
     // Remaining stall clocks
@@ -109,6 +127,11 @@ impl<'a> CPU<'a> {
         vm: &'a mut VirtualMemory,
         callstack: &'a mut CallStack<'a>,
         itrace: bool,
+        pre_pipeline_info: bool,
+        pipeline_info: bool,
+        post_pipeline_info: bool,
+        control_hazard_info: bool,
+        data_hazard_info: bool,
     ) -> CPU<'a> {
         // x0 already set to 0
         let reg_file = RegisterFile::empty();
@@ -127,6 +150,16 @@ impl<'a> CPU<'a> {
             itl_d_e: InternalDecodeExec::default(),
             itl_e_m: InternalExecMem::default(),
             itl_m_w: InternalMemWb::default(),
+            pre_pipeline_info,
+            pipeline_info,
+            post_pipeline_info,
+            control_hazard_info,
+            data_hazard_info,
+            clock_info: pre_pipeline_info
+                || pipeline_info
+                || post_pipeline_info
+                || control_hazard_info
+                || data_hazard_info,
             hazard_detection_unit: HazardDetectionUnit::default(),
             // stall: 1,
         }
@@ -187,19 +220,18 @@ impl<'a> CPU<'a> {
     }
 
     fn clock(&mut self) -> Result<()> {
-        // DEBUG: input()
-        // input();
-
         let mut e_pipeline_state = PipelineState::Normal;
         let mut d_pipeline_state = PipelineState::Normal;
         let mut f_pipeline_state = PipelineState::Normal;
 
         // begin the clock
         self.clock += 1;
-        debug!(
-            "#################### CLOCK: {} ####################",
-            self.clock
-        );
+        if self.clock_info {
+            debug!(
+                "#################### CLOCK: {} ####################",
+                self.clock
+            );
+        }
 
         /*
         // detect control hazard
@@ -235,23 +267,25 @@ impl<'a> CPU<'a> {
                 // stall the pipeline
                 // id est set the control bits in the EX,MEM, and WB control fields of the ID/EX
                 // pipeline register to 0 (noop).
-                warn!("Load-use hazard detected.");
-                warn!(
-                    "  IF/ID.rs1={}({})",
-                    self.itl_d_e.rd,
-                    reg_name_by_id(self.itl_d_e.rd)
-                );
-                warn!(
-                    "  ID/EX.rd={}({})",
-                    self.itl_f_d.rs1,
-                    reg_name_by_id(self.itl_f_d.rs1)
-                );
-                warn!(
-                    "  IF/ID.rs2={}({})",
-                    self.itl_f_d.rs2,
-                    reg_name_by_id(self.itl_f_d.rs2)
-                );
-                warn!("  Stall 1 cycle");
+                if self.data_hazard_info {
+                    warn!("Load-use hazard detected.");
+                    warn!(
+                        "  IF/ID.rs1={}({})",
+                        self.itl_d_e.rd,
+                        reg_name_by_id(self.itl_d_e.rd)
+                    );
+                    warn!(
+                        "  ID/EX.rd={}({})",
+                        self.itl_f_d.rs1,
+                        reg_name_by_id(self.itl_f_d.rs1)
+                    );
+                    warn!(
+                        "  IF/ID.rs2={}({})",
+                        self.itl_f_d.rs2,
+                        reg_name_by_id(self.itl_f_d.rs2)
+                    );
+                    warn!("  Stall 1 cycle");
+                }
                 // should_stall = true;
                 // self.stall = self.stall.max(1);
                 true
@@ -272,15 +306,17 @@ impl<'a> CPU<'a> {
                 && mem_wb_mem_read
                 && exec_mem_mem_write
             {
-                warn!("Memory-to-memory hazard detected");
-                warn!("  Forwarding regval of MEM/WB");
-                warn!(
-                    "  MEM/WB.rd={}({}) to EXEC/MEM.rd={}({})",
-                    mem_wb_rd,
-                    reg_name_by_id(mem_wb_rd),
-                    exec_mem_rd,
-                    reg_name_by_id(exec_mem_rd)
-                );
+                if self.data_hazard_info {
+                    warn!("Memory-to-memory hazard detected");
+                    warn!("  Forwarding regval of MEM/WB");
+                    warn!(
+                        "  MEM/WB.rd={}({}) to EXEC/MEM.rd={}({})",
+                        mem_wb_rd,
+                        reg_name_by_id(mem_wb_rd),
+                        exec_mem_rd,
+                        reg_name_by_id(exec_mem_rd)
+                    );
+                }
                 self.itl_e_m.m2m_forward = true;
                 self.itl_e_m.m2m_forward_val = self.itl_m_w.regval;
             }
@@ -295,16 +331,20 @@ impl<'a> CPU<'a> {
             let id_ex_rs1 = self.itl_d_e.rs1;
             let id_ex_rs2 = self.itl_d_e.rs2;
             if ex_mem_reg_write && (ex_mem_rd != 0) && (ex_mem_rd == id_ex_rs1) {
-                warn!("EX/MEM data hazard detected, for ALU SRC A");
-                warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
-                warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                if self.data_hazard_info {
+                    warn!("EX/MEM data hazard detected, for ALU SRC A");
+                    warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
+                    warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                }
                 // forward A from EX/MEM
                 self.itl_d_e.forward_a = 0b10;
             }
             if ex_mem_reg_write && (ex_mem_rd != 0) && (ex_mem_rd == id_ex_rs2) {
-                warn!("EX/MEM data hazard detected, for ALU SRC B");
-                warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
-                warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                if self.data_hazard_info {
+                    warn!("EX/MEM data hazard detected, for ALU SRC B");
+                    warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
+                    warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                }
                 // forward B from EX/MEM
                 self.itl_d_e.forward_b = 0b10;
             }
@@ -323,9 +363,11 @@ impl<'a> CPU<'a> {
                 && (ex_mem_rd != id_ex_rs1)
                 && (mem_wb_rd == id_ex_rs1)
             {
-                warn!("MEM/WB data hazard detected, for ALU SRC A");
-                warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
-                warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                if self.data_hazard_info {
+                    warn!("MEM/WB data hazard detected, for ALU SRC A");
+                    warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
+                    warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                }
                 // forward A from MEM/WB
                 assert_eq!(self.itl_d_e.forward_a, 0);
                 self.itl_d_e.forward_a = 0b01;
@@ -335,9 +377,11 @@ impl<'a> CPU<'a> {
                 && (ex_mem_rd != id_ex_rs2)
                 && (mem_wb_rd == id_ex_rs2)
             {
-                warn!("MEM/WB data hazard detected, for ALU SRC B");
-                warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
-                warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                if self.data_hazard_info {
+                    warn!("MEM/WB data hazard detected, for ALU SRC B");
+                    warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
+                    warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                }
                 // forward B from MEM/WB
                 assert_eq!(self.itl_d_e.forward_b, 0);
                 self.itl_d_e.forward_b = 0b01;
@@ -345,31 +389,28 @@ impl<'a> CPU<'a> {
             self.itl_m_w.regval
         };
 
-        // hazard detect unit decides whether CPU should stall
-        // if should_stall {
-        // self.stall();
-        // }
-
-        // print current CPU status
-
         // function units
-        let running = writeback(&self.itl_m_w, &mut self.reg_file);
-        // debug!("MEM/WB {:#x} {:#?}", self.itl_m_w.pc, self.itl_m_w.alu_op);
-
-        let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm);
-        // debug!("EX/MEM {:#x} {:#?}", self.itl_e_m.pc, self.itl_e_m.alu_op);
-
-        let (new_itl_e_m, ex_branch, pc_src, new_pc_0, new_pc_1) =
-            exec(&self.itl_d_e, ex_mem_forward, mem_wb_forward)?;
-        // debug!(
-        //     "ID/EX  {:#x} {:#?}",
-        //     self.itl_d_e.pc, self.itl_d_e.exec_flags.alu_op
-        // );
-        let new_itl_d_e = decode(&self.reg_file, &self.itl_f_d);
-        // debug!(
-        //     "IF/ID  {:#x} {:#?}",
-        //     self.itl_f_d.pc, self.itl_f_d.exec_flags.alu_op
-        // );
+        if self.pre_pipeline_info {
+            info!("MEM/WB {:#x} {:#?}", self.itl_m_w.pc, self.itl_m_w.alu_op);
+            info!("EX/MEM {:#x} {:#?}", self.itl_e_m.pc, self.itl_e_m.alu_op);
+            info!(
+                "ID/EX  {:#x} {:#?}",
+                self.itl_d_e.pc, self.itl_d_e.exec_flags.alu_op
+            );
+            info!(
+                "IF/ID  {:#x} {:#?}",
+                self.itl_f_d.pc, self.itl_f_d.exec_flags.alu_op
+            );
+        }
+        let running = writeback(&self.itl_m_w, &mut self.reg_file, self.pipeline_info);
+        let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm, self.pipeline_info);
+        let (new_itl_e_m, ex_branch, pc_src, new_pc_0, new_pc_1) = exec(
+            &self.itl_d_e,
+            ex_mem_forward,
+            mem_wb_forward,
+            self.pipeline_info,
+        )?;
+        let new_itl_d_e = decode(&self.reg_file, &self.itl_f_d, self.pipeline_info);
 
         // // decide the pc (by hazard unit) Naive
         // let next_pc = if should_stall {
@@ -393,23 +434,16 @@ impl<'a> CPU<'a> {
         // };
 
         // Fetch code
-        // let new_itl_f_d = if self.continue_fetch {
-        //     let (new_itl_f_d, continue_fetch) = fetch(&self.pc, &mut self.vm)?;
-        //     self.continue_fetch = continue_fetch;
-        //     new_itl_f_d
-        // } else {
-        //     InternalFetchDecode::default()
-        // };
-        let new_itl_f_d = fetch(&self.pc, &mut self.vm);
+        let new_itl_f_d = fetch(&self.pc, &mut self.vm, self.pipeline_info);
 
         // mispredict
         let mispredict = ex_branch && pc_src; // for now, using `always-not-taken` prediction.
         if mispredict {
-            warn!("Misprediction detected");
+            if self.control_hazard_info {
+                warn!("Misprediction detected");
+            }
             e_pipeline_state = e_pipeline_state.max(PipelineState::Bubble);
-            // new_itl_e_m = InternalExecMem::default();
             d_pipeline_state = d_pipeline_state.max(PipelineState::Bubble);
-            // new_itl_d_e = InternalDecodeExec::default();
         }
 
         // handle load-use hazard
@@ -423,16 +457,6 @@ impl<'a> CPU<'a> {
             PipelineState::Stall => self.pc.read(),
             PipelineState::Bubble => unreachable!(),
             PipelineState::Normal => {
-                // if ex_branch {
-                //     if pc_src {
-                //         new_pc_1
-                //     } else {
-                //         new_pc_0
-                //     }
-                // } else {
-                //     assert!(!pc_src);
-                //     self.pc.read().wrapping_add(4)
-                // }
                 if mispredict {
                     new_pc_1
                 } else {
@@ -444,7 +468,9 @@ impl<'a> CPU<'a> {
         // Write back pc
         self.pc.write(next_pc);
 
-        info!("EX: PC decided {} {:#x}", pc_src, next_pc);
+        if self.clock_info {
+            info!("EX: PC decided {} {:#x}", pc_src, next_pc);
+        }
 
         let new_itl_d_e = match e_pipeline_state {
             PipelineState::Normal => new_itl_d_e,
@@ -463,6 +489,19 @@ impl<'a> CPU<'a> {
         self.itl_e_m = new_itl_e_m;
         self.itl_d_e = new_itl_d_e;
         self.itl_f_d = new_itl_f_d;
+
+        if self.post_pipeline_info {
+            info!("MEM/WB {:#x} {:#?}", self.itl_m_w.pc, self.itl_m_w.alu_op);
+            info!("EX/MEM {:#x} {:#?}", self.itl_e_m.pc, self.itl_e_m.alu_op);
+            info!(
+                "ID/EX  {:#x} {:#?}",
+                self.itl_d_e.pc, self.itl_d_e.exec_flags.alu_op
+            );
+            info!(
+                "IF/ID  {:#x} {:#?}",
+                self.itl_f_d.pc, self.itl_f_d.exec_flags.alu_op
+            );
+        }
 
         // reset x0 to 0
         self.reg_file.write(0, 0);

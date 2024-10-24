@@ -39,6 +39,26 @@ struct Args {
     /// Enable ftrace.
     #[arg(long)]
     ftrace: bool,
+
+    // Pre-execution pipeline register info
+    #[arg(long)]
+    pre_pipeline_info: bool,
+
+    // Pipeline info
+    #[arg(long)]
+    pipeline_info: bool,
+
+    // Post-execution pipeline register info
+    #[arg(long)]
+    post_pipeline_info: bool,
+
+    // Control hazard info
+    #[arg(long)]
+    control_hazard_info: bool,
+
+    // Data hazard info
+    #[arg(long)]
+    data_hazard_info: bool,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -60,6 +80,11 @@ fn main() {
     let mtrace = args.mtrace;
     let ftrace = args.ftrace;
     let cpu_mode = args.cpu_mode;
+    let pre_pipeline_info = args.pre_pipeline_info;
+    let pipeline_info = args.pipeline_info;
+    let post_pipeline_info = args.post_pipeline_info;
+    let control_hazard_info = args.control_hazard_info;
+    let data_hazard_info = args.data_hazard_info;
     info!("Loading file: {file_path:?}");
 
     // Parse ELF file
@@ -88,7 +113,17 @@ fn main() {
         CPUMode::Multi => {}
         CPUMode::Pipeline => {
             use multi_stage::cpu::CPU;
-            let mut cpu = CPU::new(&mut vm, &mut callstack, itrace);
+
+            let mut cpu = CPU::new(
+                &mut vm,
+                &mut callstack,
+                itrace,
+                pre_pipeline_info,
+                pipeline_info,
+                post_pipeline_info,
+                control_hazard_info,
+                data_hazard_info,
+            );
 
             cpu.init_elfinfo_64(&elf_info);
 
