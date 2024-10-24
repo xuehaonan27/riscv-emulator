@@ -8,7 +8,7 @@ use crate::{
         vm::VirtualMemory,
     },
     elf::LoadElfInfo,
-    error::Result,
+    error::{Error, Result},
 };
 
 use super::{
@@ -219,7 +219,7 @@ impl<'a> CPU<'a> {
         self.itl_d_e = InternalDecodeExec::default();
     }
 
-    fn clock(&mut self) -> Result<()> {
+    pub(super) fn clock(&mut self) -> Result<()> {
         let mut e_pipeline_state = PipelineState::Normal;
         let mut d_pipeline_state = PipelineState::Normal;
         let mut f_pipeline_state = PipelineState::Normal;
@@ -409,6 +409,7 @@ impl<'a> CPU<'a> {
             ex_mem_forward,
             mem_wb_forward,
             self.pipeline_info,
+            &mut self.callstack,
         )?;
         let new_itl_d_e = decode(&self.reg_file, &self.itl_f_d, self.pipeline_info);
 
@@ -509,6 +510,60 @@ impl<'a> CPU<'a> {
         // decide whether continue to run
         self.running = running;
         Ok(())
+    }
+}
+
+impl<'a> CPU<'a> {
+    pub(super) fn pc(&self) -> u64 {
+        self.pc.read()
+    }
+
+    pub(super) fn mread<T: Sized + std::fmt::Display>(&self, vaddr: u64) -> T {
+        self.vm.mread(vaddr as usize)
+    }
+
+    pub(super) fn backtrace(&self) {
+        self.callstack.backtrace();
+    }
+
+    pub(super) fn reg_val_by_name(&self, name: &str) -> Result<u64> {
+        let idx = match name {
+            "zero" | "x0" => 0,
+            "ra" | "x1" => 1,
+            "sp" | "x2" => 2,
+            "gp" | "x3" => 3,
+            "tp" | "x4" => 4,
+            "t0" | "x5" => 5,
+            "t1" | "x6" => 6,
+            "t2" | "x7" => 7,
+            "s0" | "x8" => 8,
+            "s1" | "x9" => 9,
+            "a0" | "x10" => 10,
+            "a1" | "x11" => 11,
+            "a2" | "x12" => 12,
+            "a3" | "x13" => 13,
+            "a4" | "x14" => 14,
+            "a5" | "x15" => 15,
+            "a6" | "x16" => 16,
+            "a7" | "x17" => 17,
+            "s2" | "x18" => 18,
+            "s3" | "x19" => 19,
+            "s4" | "x20" => 20,
+            "s5" | "x21" => 21,
+            "s6" | "x22" => 22,
+            "s7" | "x23" => 23,
+            "s8" | "x24" => 24,
+            "s9" | "x25" => 25,
+            "s10" | "x26" => 26,
+            "s11" | "x27" => 27,
+            "t3" | "x28" => 28,
+            "t4" | "x29" => 29,
+            "t5" | "x30" => 30,
+            "t6" | "x31" => 31,
+            "pc" => return Ok(self.pc()),
+            _ => return Err(Error::InvalidRegName(name.into())),
+        };
+        Ok(self.reg_file.read(idx))
     }
 }
 

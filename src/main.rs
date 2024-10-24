@@ -112,8 +112,7 @@ fn main() {
         }
         CPUMode::Multi => {}
         CPUMode::Pipeline => {
-            use multi_stage::cpu::CPU;
-
+            use multi_stage::{cpu::CPU, debug::REDB};
             let mut cpu = CPU::new(
                 &mut vm,
                 &mut callstack,
@@ -127,7 +126,12 @@ fn main() {
 
             cpu.init_elfinfo_64(&elf_info);
 
-            cpu.cpu_exec(None).expect("Failed to execute the program");
+            if !enable_debug_mode {
+                cpu.cpu_exec(None).expect("Failed to execute the program");
+            } else {
+                let mut redb = REDB::new(&mut cpu);
+                redb.run();
+            }
         }
     }
 

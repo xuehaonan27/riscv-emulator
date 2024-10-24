@@ -3,13 +3,11 @@ use std::ops::{BitAnd, BitOr, BitXor};
 use log::{trace, warn};
 
 use crate::{
-    core::insts::{
+    callstack::CallStack, core::insts::{
         get_high_64_bit, sext, trunc_to_16_bit, trunc_to_32_bit, trunc_to_5_bit,
         trunc_to_5_bit_and_check, trunc_to_6_bit, trunc_to_8_bit, BYTE_BITWIDTH, HALF_BITWIDTH,
         WORD_BITWIDTH,
-    },
-    error::{Error, Exception, Result},
-    multi_stage::{ctrl_flags::BranchFlags, debug::e_pinst},
+    }, error::{Error, Exception, Result}, multi_stage::{ctrl_flags::BranchFlags, debug::e_pinst}
 };
 
 use super::phases::{InternalDecodeExec, InternalExecMem};
@@ -19,6 +17,7 @@ pub fn exec(
     ex_mem_forward: u64,
     mem_wb_forward: u64,
     pipeline_info: bool,
+    callstack: &mut CallStack,
 ) -> Result<(InternalExecMem, bool, bool, u64, u64)> {
     use crate::core::insts::Inst64::*;
     if pipeline_info {
@@ -123,12 +122,23 @@ pub fn exec(
             pc_src = true;
             new_pc_1 = pc.wrapping_add(imm);
             let result = new_pc_0;
+
+            // call
+            callstack.call(pc, new_pc_1);
+
             result
         }
         jalr => {
             pc_src = true;
             new_pc_1 = src1.wrapping_add(imm) & (!1);
             let result = new_pc_0;
+
+            // ret
+            // 00008067          	jalr	zero,0(ra)
+            if itl_d_e.rd == 0 && itl_d_e.imm == 0 && itl_d_e.rs1 == 1 {
+                callstack.ret(pc);
+            }
+
             result
         }
         beq => {
