@@ -5,7 +5,10 @@ use std::{
 
 use log::trace;
 
-use crate::elf::LoadElfInfo;
+use crate::{
+    elf::LoadElfInfo,
+    error::{Error, Result},
+};
 
 const PROTECT_SIZE: usize = 1 * 1024 * 1024; // 1 MiB, for separation of stack
 const STACK_SIZE: usize = 8 * 1024 * 1024; // 8 MiB, for the stack
@@ -119,5 +122,23 @@ impl VirtualMemory {
             type_name
         );
         self._mread::<T>(pc)
+    }
+
+    /// Pipeline fetch instruction from memory.
+    pub fn fetch_inst_pipeline<T: Sized>(&self, pc: usize) -> Result<T> {
+        let type_name = std::any::type_name::<T>();
+        let type_u32 = std::any::type_name::<u32>();
+        let type_u16 = std::any::type_name::<u16>();
+        assert!(
+            type_name == type_u32 || type_name == type_u16,
+            "T must be either u32 or u16, but got {}",
+            type_name
+        );
+
+        if pc < self.ld_start {
+            Err(Error::Fetch("Pipeline fail".into()))
+        } else {
+            Ok(self._mread::<T>(pc))
+        }
     }
 }

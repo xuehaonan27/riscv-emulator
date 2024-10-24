@@ -12,8 +12,9 @@ pub fn writeback(itl_m_w: &InternalMemWb, reg_file: &mut RegisterFile) -> bool {
 
     let mem_to_reg = itl_m_w.wb_flags.mem_to_reg;
     if mem_to_reg {
-        debug!("WB : {:#x} -> REG[{}]({})", itl_m_w.regval, itl_m_w.rd, reg_name_by_id(itl_m_w.rd));
-        reg_file.write(itl_m_w.rd, itl_m_w.regval);
+        let write_val = if itl_m_w.rd != 0 {itl_m_w.regval} else {0};
+        debug!("WB : {:#x} -> REG[{}]({})", itl_m_w.regval, write_val, reg_name_by_id(itl_m_w.rd));
+        reg_file.write(itl_m_w.rd, write_val);
     }
 
     if itl_m_w.alu_op == Inst64::ebreak {

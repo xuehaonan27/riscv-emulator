@@ -16,12 +16,57 @@ use super::{
     writeback::writeback,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PipelineState {
+    Stall,
+    Bubble,
+    Normal,
+}
+
+impl PartialOrd for PipelineState {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering::*;
+        match (self, other) {
+            (PipelineState::Stall, PipelineState::Stall) => Some(Equal),
+            (PipelineState::Bubble, PipelineState::Bubble) => Some(Equal),
+            (PipelineState::Normal, PipelineState::Normal) => Some(Equal),
+
+            (PipelineState::Normal, PipelineState::Bubble) => Some(Less),
+            (PipelineState::Normal, PipelineState::Stall) => Some(Less),
+            (PipelineState::Bubble, PipelineState::Stall) => Some(Less),
+
+            (PipelineState::Stall, PipelineState::Bubble) => Some(Greater),
+            (PipelineState::Stall, PipelineState::Normal) => Some(Greater),
+            (PipelineState::Bubble, PipelineState::Normal) => Some(Greater),
+        }
+    }
+}
+
+impl Ord for PipelineState {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        use std::cmp::Ordering::*;
+        match (self, other) {
+            (PipelineState::Stall, PipelineState::Stall) => Equal,
+            (PipelineState::Bubble, PipelineState::Bubble) => Equal,
+            (PipelineState::Normal, PipelineState::Normal) => Equal,
+
+            (PipelineState::Normal, PipelineState::Bubble) => Less,
+            (PipelineState::Normal, PipelineState::Stall) => Less,
+            (PipelineState::Bubble, PipelineState::Stall) => Less,
+
+            (PipelineState::Stall, PipelineState::Bubble) => Greater,
+            (PipelineState::Stall, PipelineState::Normal) => Greater,
+            (PipelineState::Bubble, PipelineState::Normal) => Greater,
+        }
+    }
+}
+
 pub struct CPU<'a> {
     // indicate whether the CPU is running
     running: bool,
 
     // indicate whether the CPU should continue to fetch instruction
-    continue_fetch: bool,
+    // continue_fetch: bool,
 
     // clock
     clock: u64,
@@ -55,9 +100,8 @@ pub struct CPU<'a> {
 
     // HazardResolveUnit
     hazard_detection_unit: HazardDetectionUnit,
-
     // Remaining stall clocks
-    stall: u8,
+    // stall: u8,
 }
 
 impl<'a> CPU<'a> {
@@ -72,7 +116,7 @@ impl<'a> CPU<'a> {
 
         CPU {
             running: false,
-            continue_fetch: true,
+            // continue_fetch: true,
             clock: 0,
             reg_file,
             pc,
@@ -84,7 +128,7 @@ impl<'a> CPU<'a> {
             itl_e_m: InternalExecMem::default(),
             itl_m_w: InternalMemWb::default(),
             hazard_detection_unit: HazardDetectionUnit::default(),
-            stall: 1,
+            // stall: 1,
         }
     }
 
@@ -125,7 +169,7 @@ impl<'a> CPU<'a> {
         Ok(())
     }
 
-    fn stall(&mut self) {
+    fn flush(&mut self) {
         // self.itl_f_d.branch_flags.clear();
         // self.itl_f_d.decode_flags.clear();
         // self.itl_f_d.exec_flags.clear();
@@ -144,7 +188,11 @@ impl<'a> CPU<'a> {
 
     fn clock(&mut self) -> Result<()> {
         // DEBUG: input()
-        input();
+        // input();
+
+        let mut e_pipeline_state = PipelineState::Normal;
+        let mut d_pipeline_state = PipelineState::Normal;
+        let mut f_pipeline_state = PipelineState::Normal;
 
         // begin the clock
         self.clock += 1;
@@ -153,6 +201,7 @@ impl<'a> CPU<'a> {
             self.clock
         );
 
+        /*
         // detect control hazard
         {
             // debug!("Detecting control hazard");
@@ -166,18 +215,19 @@ impl<'a> CPU<'a> {
                 _ => (),
             }
         }
+        */
 
         // decide whether CPU should stall
-        let mut should_stall = self.stall != 0;
-        self.stall -= if self.stall == 0 { 0 } else { 1 };
-        if should_stall {
-            warn!("CPU stall: {should_stall}");
-        } else {
-            debug!("CPU stall: {should_stall}");
-        }
+        // let mut should_stall = self.stall != 0;
+        // self.stall -= if self.stall == 0 { 0 } else { 1 };
+        // if should_stall {
+        //     warn!("CPU stall: {should_stall}");
+        // } else {
+        //     debug!("CPU stall: {should_stall}");
+        // }
 
         // detect load-use hazard
-        {
+        let load_use_detected = {
             // debug!("Detecting load-use hazard");
             if self.itl_d_e.mem_flags.mem_read
                 && ((self.itl_d_e.rd == self.itl_f_d.rs1) || (self.itl_d_e.rd == self.itl_f_d.rs2))
@@ -202,10 +252,13 @@ impl<'a> CPU<'a> {
                     reg_name_by_id(self.itl_f_d.rs2)
                 );
                 warn!("  Stall 1 cycle");
-                should_stall = true;
-                self.stall = self.stall.max(1);
+                // should_stall = true;
+                // self.stall = self.stall.max(1);
+                true
+            } else {
+                false
             }
-        }
+        };
 
         // detect memory-to-memory copy
         {
@@ -214,7 +267,11 @@ impl<'a> CPU<'a> {
             let mem_wb_mem_read = self.itl_m_w.mem_read;
             let exec_mem_rd = self.itl_e_m.rd;
             let exec_mem_mem_write = self.itl_e_m.mem_flags.mem_write;
-            if (mem_wb_rd == exec_mem_rd) && mem_wb_mem_read && exec_mem_mem_write {
+            if (mem_wb_rd != 0)
+                && (mem_wb_rd == exec_mem_rd)
+                && mem_wb_mem_read
+                && exec_mem_mem_write
+            {
                 warn!("Memory-to-memory hazard detected");
                 warn!("  Forwarding regval of MEM/WB");
                 warn!(
@@ -267,8 +324,8 @@ impl<'a> CPU<'a> {
                 && (mem_wb_rd == id_ex_rs1)
             {
                 warn!("MEM/WB data hazard detected, for ALU SRC A");
-                warn!("MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
-                warn!("ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
+                warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
                 // forward A from MEM/WB
                 assert_eq!(self.itl_d_e.forward_a, 0);
                 self.itl_d_e.forward_a = 0b01;
@@ -279,8 +336,8 @@ impl<'a> CPU<'a> {
                 && (mem_wb_rd == id_ex_rs2)
             {
                 warn!("MEM/WB data hazard detected, for ALU SRC B");
-                warn!("MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
-                warn!("ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
+                warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
                 // forward B from MEM/WB
                 assert_eq!(self.itl_d_e.forward_b, 0);
                 self.itl_d_e.forward_b = 0b01;
@@ -289,9 +346,9 @@ impl<'a> CPU<'a> {
         };
 
         // hazard detect unit decides whether CPU should stall
-        if should_stall {
-            self.stall();
-        }
+        // if should_stall {
+        // self.stall();
+        // }
 
         // print current CPU status
 
@@ -314,41 +371,92 @@ impl<'a> CPU<'a> {
         //     self.itl_f_d.pc, self.itl_f_d.exec_flags.alu_op
         // );
 
-        // decide the pc (by hazard unit)
-        let real_pc = if should_stall {
-            // if the CPU should stall, then Hazard Detect Unit should keep pc unchanged.
-            self.pc.read()
-        } else {
-            if ex_branch {
-                // if Exec phase is a branch instruction, then decide new pc according to `pc_src` flag.
-                if pc_src {
-                    new_pc_1
-                } else {
-                    // if do not use new pc, then we should recover the pc seen by the branch instruction!
-                    new_pc_0
-                }
-            } else {
-                assert!(!pc_src); // pc_src must be false!
-                // if Exec phase is not a branch instruction, then new pc should add by itself,
-                // instead of fetching `pc+4` from Exec phase instruction.
-                self.pc.read().wrapping_add(4)
-            }
-        };
-
-        // If using NaivePolicy (Stall 3 cycles) then nothing special need to be done.
-        // Write back pc
-        self.pc.write(real_pc);
+        // // decide the pc (by hazard unit) Naive
+        // let next_pc = if should_stall {
+        //     // if the CPU should stall, then Hazard Detect Unit should keep pc unchanged.
+        //     self.pc.read()
+        // } else {
+        //     if ex_branch {
+        //         // if Exec phase is a branch instruction, then decide new pc according to `pc_src` flag.
+        //         if pc_src {
+        //             new_pc_1
+        //         } else {
+        //             // if do not use new pc, then we should recover the pc seen by the branch instruction!
+        //             new_pc_0
+        //         }
+        //     } else {
+        //         assert!(!pc_src); // pc_src must be false!
+        //                           // if Exec phase is not a branch instruction, then new pc should add by itself,
+        //                           // instead of fetching `pc+4` from Exec phase instruction.
+        //         self.pc.read().wrapping_add(4)
+        //     }
+        // };
 
         // Fetch code
-        let new_itl_f_d = if self.continue_fetch {
-            let (new_itl_f_d, continue_fetch) = fetch(&self.pc, &mut self.vm)?;
-            self.continue_fetch = continue_fetch;
-            new_itl_f_d
-        } else {
-            InternalFetchDecode::default()
+        // let new_itl_f_d = if self.continue_fetch {
+        //     let (new_itl_f_d, continue_fetch) = fetch(&self.pc, &mut self.vm)?;
+        //     self.continue_fetch = continue_fetch;
+        //     new_itl_f_d
+        // } else {
+        //     InternalFetchDecode::default()
+        // };
+        let new_itl_f_d = fetch(&self.pc, &mut self.vm);
+
+        // mispredict
+        let mispredict = ex_branch && pc_src; // for now, using `always-not-taken` prediction.
+        if mispredict {
+            warn!("Misprediction detected");
+            e_pipeline_state = e_pipeline_state.max(PipelineState::Bubble);
+            // new_itl_e_m = InternalExecMem::default();
+            d_pipeline_state = d_pipeline_state.max(PipelineState::Bubble);
+            // new_itl_d_e = InternalDecodeExec::default();
+        }
+
+        // handle load-use hazard
+        if load_use_detected {
+            e_pipeline_state = e_pipeline_state.max(PipelineState::Bubble);
+            d_pipeline_state = d_pipeline_state.max(PipelineState::Stall);
+            f_pipeline_state = f_pipeline_state.max(PipelineState::Stall);
+        }
+
+        let next_pc = match f_pipeline_state {
+            PipelineState::Stall => self.pc.read(),
+            PipelineState::Bubble => unreachable!(),
+            PipelineState::Normal => {
+                // if ex_branch {
+                //     if pc_src {
+                //         new_pc_1
+                //     } else {
+                //         new_pc_0
+                //     }
+                // } else {
+                //     assert!(!pc_src);
+                //     self.pc.read().wrapping_add(4)
+                // }
+                if mispredict {
+                    new_pc_1
+                } else {
+                    self.pc.read().wrapping_add(4)
+                }
+            }
+        };
+        // If using NaivePolicy (Stall 3 cycles) then nothing special need to be done.
+        // Write back pc
+        self.pc.write(next_pc);
+
+        info!("EX: PC decided {} {:#x}", pc_src, next_pc);
+
+        let new_itl_d_e = match e_pipeline_state {
+            PipelineState::Normal => new_itl_d_e,
+            PipelineState::Bubble => InternalDecodeExec::default(),
+            PipelineState::Stall => unreachable!(),
         };
 
-        info!("EX: PC decided {} {:#x}", pc_src, real_pc);
+        let new_itl_f_d = match d_pipeline_state {
+            PipelineState::Normal => new_itl_f_d,
+            PipelineState::Bubble => InternalFetchDecode::default(),
+            PipelineState::Stall => self.itl_f_d,
+        };
 
         // push pipeline forward
         self.itl_m_w = new_itl_m_w;

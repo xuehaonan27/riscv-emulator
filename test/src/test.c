@@ -1,20 +1,49 @@
 #include <trap.h>
 
-unsigned short mem[] = {
-	0x0, 0x0258, 0x4abc, 0x7fff, 0x8000, 0x8100, 0xabcd, 0xffff
-};
+#define N 1
 
-unsigned  sh_ans[] = {
-	0x0000fffd, 0x0000fff7, 0x0000ffdf, 0x0000ff7f, 0x0000fdff, 0x0000f7ff, 0x0000dfff, 0x00007fff
-};
+int a[N] = {0};
+
+int partition(int *a, int p, int q) {
+	int pivot = a[p];
+	int i = p, j = q;
+	while(i < j) {
+		while(i < j && a[j] > pivot) j --;
+		a[i] = a[j];
+
+		while(i < j && a[i] <= pivot) i ++;
+		a[j] = a[i];
+	}
+
+	a[i] = pivot;
+	return i;
+}
+
+void quick_sort(int *a, int p, int q) {
+	if(p >= q) return;
+
+	int m = partition(a, p, q);
+	quick_sort(a, p, m - 1);
+	quick_sort(a, m + 1, q);
+}
 
 int main() {
-	unsigned i;
+	quick_sort(a, 0, N - 1);
 
-	for(i = 0; i < LENGTH(mem); i ++) {
-		mem[i] = ~(1 << (2 * i + 1));
-		check(mem[i] == sh_ans[i]);
+	int i;
+	for(i = 0; i < N; i ++) {
+		check(a[i] == i);
 	}
+
+	check(i == N);
+
+	quick_sort(a, 0, N - 1);
+
+	for(i = 0; i < N; i ++) {
+		check(a[i] == i);
+	}
+
+	check(i == N);
 
 	return 0;
 }

@@ -10,6 +10,8 @@ pub enum Error {
     DbgParse(String),
     #[error("Unknown register name: {0}")]
     InvalidRegName(String),
+    #[error("Error when fetch instruction: {0}")]
+    Fetch(String),
     #[error("Error when decoding: {0}")]
     Decode(String),
     #[error("Error when executing: {0}")]

@@ -17,13 +17,24 @@ use super::{
 };
 
 /// Fetch instruction
-pub fn fetch(pc: &ProgramCounter, vm: &VirtualMemory) -> Result<(InternalFetchDecode, bool)> {
+pub fn fetch(pc: &ProgramCounter, vm: &VirtualMemory) -> InternalFetchDecode {
     let pc = pc.read();
-    let inst = vm.fetch_inst(pc as usize);
-    inst_interpret(pc, inst).map(|x| {
-        trace!("IF : {}", f_pinst(&x));
-        (x, x.exec_flags.alu_op != Inst64::ebreak)
-    })
+    let inst = vm.fetch_inst_pipeline(pc as usize);
+
+    inst.and_then(|inst| inst_interpret(pc, inst))
+        .map(|itl| {
+            trace!("IF : {}", f_pinst(&itl));
+            itl
+        })
+        .unwrap_or_else(|_| InternalFetchDecode::default())
+
+    // if let Ok(inst) = inst {
+    //     let itl = inst_interpret(pc, inst);
+    //     trace!("IF : {}", f_pinst(&itl));
+    //     Ok(itl)
+    // } else {
+    //     Ok(InternalFetchDecode::default())
+    // }
 }
 
 /// Decode phase.
@@ -43,27 +54,27 @@ fn inst_interpret(pc: u64, inst: u32) -> Result<InternalFetchDecode> {
 
     let mut itl_f_d = match opcode {
         LOAD => decode_load(inst),
-        LOAD_FP => decode_load_fp(inst),
-        MISC_MEM => decode_misc_mem(inst),
+        LOAD_FP => return Err(Error::Fetch("todo".into())),
+        MISC_MEM => return Err(Error::Fetch("todo".into())),
         OP_IMM => decode_op_imm(inst),
         AUIPC => decode_op_auipc(inst),
         OP_IMM_32 => decode_op_imm_32(inst),
         STORE => decode_store(inst),
         STORE_FP => decode_store_fp(inst),
-        AMO => decode_amo(inst),
+        AMO => return Err(Error::Fetch("todo".into())),
         OP => decode_op(inst),
         LUI => decode_lui(inst),
         OP_32 => decode_op_32(inst),
-        MADD => decode_madd(inst),
-        MSUB => decode_msub(inst),
-        NMSUB => decode_nmsub(inst),
-        NMADD => decode_nmadd(inst),
-        OP_FP => decode_op_fp(inst),
+        MADD => return Err(Error::Fetch("todo".into())),
+        MSUB => return Err(Error::Fetch("todo".into())),
+        NMSUB => return Err(Error::Fetch("todo".into())),
+        NMADD => return Err(Error::Fetch("todo".into())),
+        OP_FP => return Err(Error::Fetch("todo".into())),
         BRANCH => decode_branch(inst),
         JALR => decode_jalr(inst),
         JAL => decode_jal(inst),
         SYSTEM => decode_system(inst),
-        _ => todo!(),
+        _ => return Err(Error::Fetch("Interpretation".into())),
     };
 
     if let Ok(ref mut itl_f_d) = itl_f_d {
