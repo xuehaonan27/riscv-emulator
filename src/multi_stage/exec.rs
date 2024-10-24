@@ -14,8 +14,6 @@ use super::phases::{InternalDecodeExec, InternalExecMem};
 
 pub fn exec(
     itl_d_e: &InternalDecodeExec,
-    ex_mem_forward: u64,
-    mem_wb_forward: u64,
     pipeline_info: bool,
     callstack: &mut CallStack,
 ) -> Result<(InternalExecMem, bool, bool, u64, u64)> {
@@ -23,6 +21,9 @@ pub fn exec(
     if pipeline_info {
         trace!("EX : {}", e_pinst(itl_d_e));
     }
+
+    let ex_mem_forward = itl_d_e.ex_mem_forward;
+    let mem_wb_forward = itl_d_e.mem_wb_forward;
 
     // data forward
     let src1 = match itl_d_e.forward_a {

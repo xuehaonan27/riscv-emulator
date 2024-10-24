@@ -3,6 +3,7 @@ use clap::{Parser, ValueEnum};
 use core::vm::VirtualMemory;
 use elf::read_elf;
 use log::info;
+use multi_stage::cpu::{ControlPolicy, DataHazardPolicy};
 use std::path;
 
 mod callstack;
@@ -39,6 +40,14 @@ struct Args {
     /// Enable ftrace.
     #[arg(long)]
     ftrace: bool,
+
+    /// Data hazard policy
+    #[arg(long)]
+    data_hazard_policy: DataHazardPolicy,
+
+    /// Control policy
+    #[arg(long)]
+    control_policy: ControlPolicy,
 
     // Pre-execution pipeline register info
     #[arg(long)]
@@ -80,6 +89,8 @@ fn main() {
     let mtrace = args.mtrace;
     let ftrace = args.ftrace;
     let cpu_mode = args.cpu_mode;
+    let data_hazard_policy = args.data_hazard_policy;
+    let control_policy = args.control_policy;
     let pre_pipeline_info = args.pre_pipeline_info;
     let pipeline_info = args.pipeline_info;
     let post_pipeline_info = args.post_pipeline_info;
@@ -117,6 +128,8 @@ fn main() {
                 &mut vm,
                 &mut callstack,
                 itrace,
+                data_hazard_policy,
+                control_policy,
                 pre_pipeline_info,
                 pipeline_info,
                 post_pipeline_info,
@@ -128,6 +141,7 @@ fn main() {
 
             if !enable_debug_mode {
                 cpu.cpu_exec(None).expect("Failed to execute the program");
+                cpu.print_info();
             } else {
                 let mut redb = REDB::new(&mut cpu);
                 redb.run();

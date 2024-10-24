@@ -65,6 +65,26 @@ else
 	__DATA_HAZARD_INFO =
 endif
 
+ifeq ($(DATA_HAZARD_POLICY), naiveStall)
+	__DATA_HAZARD_POLICY = --data-hazard-policy naive-stall
+else ifeq ($(DATA_HAZARD_POLICY), dataForward)
+	__DATA_HAZARD_POLICY = --data-hazard-policy data-forward
+else
+	__DATA_HAZARD_POLICY =
+endif
+
+ifeq ($(CONTROL_POLICY), allStall)
+	__CONTROL_POLICY = --control-policy all-stall
+else ifeq ($(CONTROL_POLICY), alwaysNotTaken)
+	__CONTROL_POLICY = --control-policy always-not-taken
+else ifeq ($(CONTROL_POLICY), alwaysTaken)
+	__CONTROL_POLICY = --control-policy always-taken
+else ifeq ($(CONTROL_POLICY), dynamicPredict)
+	__CONTROL_POLICY = --control-policy dynamic-predict
+else
+	__CONTROL_POLICY =
+endif
+
 all:
 	@echo "-------Build Simulator-------"
 	@$(CARGO) build --release
@@ -77,6 +97,8 @@ all:
 	$(__POST_PIPELINE_INFO) \
 	$(__CONTROL_HAZARD_INFO) \
 	$(__DATA_HAZARD_INFO) \
+	$(__DATA_HAZARD_POLICY) \
+	$(__CONTROL_POLICY) \
 	$(CPU_MODE) -i ./test/build/$(T).elf
 
 RUST_SRC := src
@@ -95,7 +117,10 @@ $(FILE_NAMES):
 	@echo "-------Build Test $@-------"
 	@$(MAKE) -C test T=$@
 	@echo "-------Start Simulation-------"
-	-@$(SIM) $(CPU_MODE) -i ./test/build/$@.elf
+	@$(SIM) $(CPU_MODE) \
+	$(__DATA_HAZARD_POLICY) \
+	$(__CONTROL_POLICY) \
+	-i ./test/build/$@.elf
 
 
 clean:

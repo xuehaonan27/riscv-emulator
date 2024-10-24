@@ -22,8 +22,8 @@ pub fn writeback(
         if pipeline_info {
             debug!(
                 "WB : {:#x} -> REG[{}]({})",
-                itl_m_w.regval,
                 write_val,
+                itl_m_w.rd,
                 reg_name_by_id(itl_m_w.rd)
             )
         };

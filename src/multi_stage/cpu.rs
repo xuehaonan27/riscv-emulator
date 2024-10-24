@@ -61,6 +61,41 @@ impl Ord for PipelineState {
     }
 }
 
+const PIPELINE_STATES_DEPTH: usize = 5;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum DataHazardPolicy {
+    NaiveStall,  // just stall
+    DataForward, // data forwarding
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ControlPolicy {
+    AllStall,       // stall when branch instructions encountered
+    AlwaysNotTaken, // static branch prediction: always not taken
+    AlwaysTaken,    // static branch prediction: always taken
+    DynamicPredict, // dynamic branch prediction
+}
+
+#[derive(Debug, Clone)]
+pub struct CPUStatistics {
+    data_hazard_count: u64,
+    control_hazard_count: u64,
+    data_hazard_delayed_cycles: u64,
+    control_hazard_delayed_cycles: u64,
+}
+
+impl Default for CPUStatistics {
+    fn default() -> Self {
+        Self {
+            data_hazard_count: 0,
+            control_hazard_count: 0,
+            data_hazard_delayed_cycles: 0,
+            control_hazard_delayed_cycles: 0,
+        }
+    }
+}
+
 pub struct CPU<'a> {
     // indicate whether the CPU is running
     running: bool,
@@ -98,6 +133,27 @@ pub struct CPU<'a> {
     // Mem / Wb
     itl_m_w: InternalMemWb,
 
+    // MEM/WB pipeline states
+    m_w_pipeline_states: [PipelineState; PIPELINE_STATES_DEPTH],
+
+    // EX/MEM pipeline states
+    e_m_pipeline_states: [PipelineState; PIPELINE_STATES_DEPTH],
+
+    // ID/EX pipeline states
+    d_e_pipeline_states: [PipelineState; PIPELINE_STATES_DEPTH],
+
+    // IF/ID pipeline states
+    f_d_pipeline_states: [PipelineState; PIPELINE_STATES_DEPTH],
+
+    // PC next states
+    pc_next_states: [PipelineState; PIPELINE_STATES_DEPTH],
+
+    // Data hazard policy
+    data_hazard_policy: DataHazardPolicy,
+
+    // Control policy
+    control_policy: ControlPolicy,
+
     // Pre-execution pipeline register info
     pre_pipeline_info: bool,
 
@@ -116,6 +172,9 @@ pub struct CPU<'a> {
     // Clock info
     clock_info: bool,
 
+    // Statistics data of CPU
+    cpu_statistics: CPUStatistics,
+
     // HazardResolveUnit
     hazard_detection_unit: HazardDetectionUnit,
     // Remaining stall clocks
@@ -127,6 +186,8 @@ impl<'a> CPU<'a> {
         vm: &'a mut VirtualMemory,
         callstack: &'a mut CallStack<'a>,
         itrace: bool,
+        data_hazard_policy: DataHazardPolicy,
+        control_policy: ControlPolicy,
         pre_pipeline_info: bool,
         pipeline_info: bool,
         post_pipeline_info: bool,
@@ -150,6 +211,13 @@ impl<'a> CPU<'a> {
             itl_d_e: InternalDecodeExec::default(),
             itl_e_m: InternalExecMem::default(),
             itl_m_w: InternalMemWb::default(),
+            m_w_pipeline_states: [PipelineState::Normal; PIPELINE_STATES_DEPTH],
+            e_m_pipeline_states: [PipelineState::Normal; PIPELINE_STATES_DEPTH],
+            d_e_pipeline_states: [PipelineState::Normal; PIPELINE_STATES_DEPTH],
+            f_d_pipeline_states: [PipelineState::Normal; PIPELINE_STATES_DEPTH],
+            pc_next_states: [PipelineState::Normal; PIPELINE_STATES_DEPTH],
+            data_hazard_policy,
+            control_policy,
             pre_pipeline_info,
             pipeline_info,
             post_pipeline_info,
@@ -160,6 +228,7 @@ impl<'a> CPU<'a> {
                 || post_pipeline_info
                 || control_hazard_info
                 || data_hazard_info,
+            cpu_statistics: CPUStatistics::default(),
             hazard_detection_unit: HazardDetectionUnit::default(),
             // stall: 1,
         }
@@ -202,28 +271,27 @@ impl<'a> CPU<'a> {
         Ok(())
     }
 
-    fn flush(&mut self) {
-        // self.itl_f_d.branch_flags.clear();
-        // self.itl_f_d.decode_flags.clear();
-        // self.itl_f_d.exec_flags.clear();
-        // self.itl_f_d.mem_flags.clear();
-        // self.itl_f_d.wb_flags.clear();
-        // self.itl_f_d.pc = 0;
-        self.itl_f_d = InternalFetchDecode::default();
-
-        // self.itl_d_e.branch_flags.clear();
-        // self.itl_d_e.exec_flags.clear();
-        // self.itl_d_e.mem_flags.clear();
-        // self.itl_d_e.wb_flags.clear();
-        // self.itl_d_e.pc = 0;
-        self.itl_d_e = InternalDecodeExec::default();
+    pub fn print_info(&self) {
+        info!("CPU run clock: {}", self.clock);
+        info!(
+            "CPU data hazard count: {}",
+            self.cpu_statistics.data_hazard_count
+        );
+        info!(
+            "CPU data hazard delayed cycles: {}",
+            self.cpu_statistics.data_hazard_delayed_cycles
+        );
+        info!(
+            "CPU control hazard count: {}",
+            self.cpu_statistics.control_hazard_count
+        );
+        info!(
+            "CPU control hazard delayed cycles: {}",
+            self.cpu_statistics.control_hazard_delayed_cycles
+        );
     }
 
     pub(super) fn clock(&mut self) -> Result<()> {
-        let mut e_pipeline_state = PipelineState::Normal;
-        let mut d_pipeline_state = PipelineState::Normal;
-        let mut f_pipeline_state = PipelineState::Normal;
-
         // begin the clock
         self.clock += 1;
         if self.clock_info {
@@ -232,31 +300,6 @@ impl<'a> CPU<'a> {
                 self.clock
             );
         }
-
-        /*
-        // detect control hazard
-        {
-            // debug!("Detecting control hazard");
-            use crate::core::insts::Inst64::*;
-            match self.itl_e_m.alu_op {
-                i @ (beq | bge | bgeu | blt | bltu | bne | jal | jalr) => {
-                    warn!("Control hazard detected: {i:?}");
-                    warn!("  Stall 3 cycles");
-                    self.stall = self.stall.max(3); // stall 3 cycles
-                }
-                _ => (),
-            }
-        }
-        */
-
-        // decide whether CPU should stall
-        // let mut should_stall = self.stall != 0;
-        // self.stall -= if self.stall == 0 { 0 } else { 1 };
-        // if should_stall {
-        //     warn!("CPU stall: {should_stall}");
-        // } else {
-        //     debug!("CPU stall: {should_stall}");
-        // }
 
         // detect load-use hazard
         let load_use_detected = {
@@ -286,8 +329,7 @@ impl<'a> CPU<'a> {
                     );
                     warn!("  Stall 1 cycle");
                 }
-                // should_stall = true;
-                // self.stall = self.stall.max(1);
+                self.cpu_statistics.data_hazard_count += 1;
                 true
             } else {
                 false
@@ -296,98 +338,201 @@ impl<'a> CPU<'a> {
 
         // detect memory-to-memory copy
         {
-            // debug!("Detecting memory-to-memory hazard");
-            let mem_wb_rd = self.itl_m_w.rd;
-            let mem_wb_mem_read = self.itl_m_w.mem_read;
-            let exec_mem_rd = self.itl_e_m.rd;
-            let exec_mem_mem_write = self.itl_e_m.mem_flags.mem_write;
-            if (mem_wb_rd != 0)
-                && (mem_wb_rd == exec_mem_rd)
-                && mem_wb_mem_read
-                && exec_mem_mem_write
-            {
-                if self.data_hazard_info {
-                    warn!("Memory-to-memory hazard detected");
-                    warn!("  Forwarding regval of MEM/WB");
-                    warn!(
-                        "  MEM/WB.rd={}({}) to EXEC/MEM.rd={}({})",
-                        mem_wb_rd,
-                        reg_name_by_id(mem_wb_rd),
-                        exec_mem_rd,
-                        reg_name_by_id(exec_mem_rd)
-                    );
+            match self.data_hazard_policy {
+                DataHazardPolicy::NaiveStall => {
+                    // solved by EX/MEM NaiveInstall policy logic
+                    let id_ex_rd = self.itl_d_e.rd;
+                    let id_ex_mem_read = self.itl_d_e.mem_flags.mem_read;
+                    let if_id_rs2 = self.itl_f_d.rs2;
+                    let if_id_mem_write = self.itl_f_d.mem_flags.mem_write;
+                    if (id_ex_rd != 0)
+                        && (id_ex_rd == if_id_rs2)
+                        && id_ex_mem_read
+                        && if_id_mem_write
+                    {
+                        if self.data_hazard_info {
+                            warn!("Memory-to-memory copy hazard detected");
+                        }
+                        self.cpu_statistics.data_hazard_count += 1;
+                        self.cpu_statistics.data_hazard_delayed_cycles += 2;
+                        self.d_e_pipeline_states_set(&mut [PipelineState::Bubble]);
+                        self.f_d_pipeline_states_set(&mut [
+                            PipelineState::Stall,
+                            PipelineState::Bubble,
+                        ]);
+                        self.pc_next_states_set(&mut [PipelineState::Stall, PipelineState::Stall]);
+                    }
                 }
-                self.itl_e_m.m2m_forward = true;
-                self.itl_e_m.m2m_forward_val = self.itl_m_w.regval;
+                DataHazardPolicy::DataForward => {
+                    // debug!("Detecting memory-to-memory hazard");
+                    let mem_wb_rd = self.itl_m_w.rd;
+                    let mem_wb_mem_read = self.itl_m_w.mem_read;
+                    let exec_mem_rs2 = self.itl_e_m.rs2;
+                    let exec_mem_mem_write = self.itl_e_m.mem_flags.mem_write;
+                    if (mem_wb_rd != 0)
+                        && (mem_wb_rd == exec_mem_rs2)
+                        && mem_wb_mem_read
+                        && exec_mem_mem_write
+                    {
+                        if self.data_hazard_info {
+                            warn!("Memory-to-memory hazard detected");
+                            warn!("  Forwarding regval of MEM/WB");
+                            warn!(
+                                "  MEM/WB.rd={}({}) to EXEC/MEM.rs2={}({})",
+                                mem_wb_rd,
+                                reg_name_by_id(mem_wb_rd),
+                                exec_mem_rs2,
+                                reg_name_by_id(exec_mem_rs2)
+                            );
+                        }
+                        self.cpu_statistics.data_hazard_count += 1;
+                        self.itl_e_m.m2m_forward = true;
+                        self.itl_e_m.m2m_forward_val = self.itl_m_w.regval;
+                    }
+                }
             }
         }
 
         // detect data hazards
-        let ex_mem_forward = {
-            // debug!("Detecting EX/MEM data hazards");
-            // EX/MEM hazard
-            let ex_mem_reg_write = self.itl_e_m.wb_flags.mem_to_reg;
-            let ex_mem_rd = self.itl_e_m.rd;
-            let id_ex_rs1 = self.itl_d_e.rs1;
-            let id_ex_rs2 = self.itl_d_e.rs2;
-            if ex_mem_reg_write && (ex_mem_rd != 0) && (ex_mem_rd == id_ex_rs1) {
-                if self.data_hazard_info {
-                    warn!("EX/MEM data hazard detected, for ALU SRC A");
-                    warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
-                    warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+        match self.data_hazard_policy {
+            DataHazardPolicy::NaiveStall => {
+                let id_ex_reg_write = self.itl_d_e.wb_flags.mem_to_reg;
+                let id_ex_rd = self.itl_d_e.rd;
+                let if_id_rs1 = self.itl_f_d.rs1;
+                let if_id_rs2 = self.itl_f_d.rs2;
+                if id_ex_reg_write
+                    && (id_ex_rd != 0)
+                    && ((id_ex_rd == if_id_rs1) || (id_ex_rd == if_id_rs2))
+                {
+                    if self.data_hazard_info {
+                        warn!("EX/MEM data hazard detected");
+                    }
+                    self.cpu_statistics.data_hazard_count += 1;
+                    self.cpu_statistics.data_hazard_delayed_cycles += 2;
+                    self.d_e_pipeline_states_set(&mut [PipelineState::Bubble]);
+                    self.f_d_pipeline_states_set(&mut [
+                        PipelineState::Stall,
+                        PipelineState::Bubble,
+                    ]);
+                    self.pc_next_states_set(&mut [PipelineState::Stall, PipelineState::Stall]);
                 }
-                // forward A from EX/MEM
-                self.itl_d_e.forward_a = 0b10;
             }
-            if ex_mem_reg_write && (ex_mem_rd != 0) && (ex_mem_rd == id_ex_rs2) {
-                if self.data_hazard_info {
-                    warn!("EX/MEM data hazard detected, for ALU SRC B");
-                    warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
-                    warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
-                }
-                // forward B from EX/MEM
-                self.itl_d_e.forward_b = 0b10;
-            }
-            self.itl_e_m.alu_out
-        };
+            DataHazardPolicy::DataForward => {
+                let ex_mem_forward = {
+                    // debug!("Detecting EX/MEM data hazards");
+                    // EX/MEM hazard
+                    let ex_mem_reg_write = self.itl_e_m.wb_flags.mem_to_reg;
+                    let ex_mem_rd = self.itl_e_m.rd;
+                    let id_ex_rs1 = self.itl_d_e.rs1;
+                    let id_ex_rs2 = self.itl_d_e.rs2;
+                    if ex_mem_reg_write && (ex_mem_rd != 0) && (ex_mem_rd == id_ex_rs1) {
+                        if self.data_hazard_info {
+                            warn!("EX/MEM data hazard detected, for ALU SRC A");
+                            warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
+                            warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                        }
+                        // forward A from EX/MEM
+                        self.itl_d_e.forward_a = 0b10;
+                    }
+                    if ex_mem_reg_write && (ex_mem_rd != 0) && (ex_mem_rd == id_ex_rs2) {
+                        if self.data_hazard_info {
+                            warn!("EX/MEM data hazard detected, for ALU SRC B");
+                            warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
+                            warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                        }
+                        // forward B from EX/MEM
+                        self.itl_d_e.forward_b = 0b10;
+                    }
 
-        let mem_wb_forward = {
-            // MEM/WB hazard
-            let mem_wb_regwrite = self.itl_m_w.wb_flags.mem_to_reg;
-            let mem_wb_rd = self.itl_m_w.rd;
-            let ex_mem_rd = self.itl_e_m.rd;
-            let id_ex_rs1 = self.itl_d_e.rs1;
-            let id_ex_rs2 = self.itl_d_e.rs2;
-            if mem_wb_regwrite
-                && (mem_wb_rd != 0)
-                && (ex_mem_rd != id_ex_rs1)
-                && (mem_wb_rd == id_ex_rs1)
-            {
-                if self.data_hazard_info {
-                    warn!("MEM/WB data hazard detected, for ALU SRC A");
-                    warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
-                    warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
-                }
-                // forward A from MEM/WB
-                assert_eq!(self.itl_d_e.forward_a, 0);
-                self.itl_d_e.forward_a = 0b01;
+                    if ex_mem_reg_write
+                        && (ex_mem_rd != 0)
+                        && ((ex_mem_rd == id_ex_rs1) || (ex_mem_rd == id_ex_rs2))
+                    {
+                        self.cpu_statistics.data_hazard_count += 1;
+                    }
+
+                    self.itl_e_m.alu_out
+                };
+                self.itl_d_e.ex_mem_forward = ex_mem_forward;
             }
-            if mem_wb_regwrite
-                && (mem_wb_rd != 0)
-                && (ex_mem_rd != id_ex_rs2)
-                && (mem_wb_rd == id_ex_rs2)
-            {
-                if self.data_hazard_info {
-                    warn!("MEM/WB data hazard detected, for ALU SRC B");
-                    warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
-                    warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+        }
+
+        match self.data_hazard_policy {
+            DataHazardPolicy::NaiveStall => {
+                let ex_mem_regwrite = self.itl_e_m.wb_flags.mem_to_reg;
+                let ex_mem_rd = self.itl_e_m.rd;
+                let id_ex_rd = self.itl_d_e.rd;
+                let if_id_rs1 = self.itl_f_d.rs1;
+                let if_id_rs2 = self.itl_f_d.rs2;
+                if ex_mem_regwrite
+                    && (ex_mem_rd != 0)
+                    && (((id_ex_rd != if_id_rs1) && (ex_mem_rd == if_id_rs1))
+                        || ((id_ex_rd != if_id_rs2) && (ex_mem_rd == if_id_rs2)))
+                {
+                    if self.data_hazard_info {
+                        warn!("MEM/WB data hazard detected");
+                    }
+                    self.cpu_statistics.data_hazard_count += 1;
+                    self.cpu_statistics.data_hazard_delayed_cycles += 1;
+                    // self.e_m_pipeline_states_set(&mut [PipelineState::Bubble]);
+                    // self.d_e_pipeline_states_set(&mut [PipelineState::Stall]); // ?
+                    // self.f_d_pipeline_states_set(&mut [PipelineState::Stall]);
+                    // self.pc_next_states_set(&mut [PipelineState::Stall]);
+
+                    self.d_e_pipeline_states_set(&mut [PipelineState::Bubble]); // ?
+                    self.f_d_pipeline_states_set(&mut [PipelineState::Stall]);
+                    self.pc_next_states_set(&mut [PipelineState::Stall]);
                 }
-                // forward B from MEM/WB
-                assert_eq!(self.itl_d_e.forward_b, 0);
-                self.itl_d_e.forward_b = 0b01;
             }
-            self.itl_m_w.regval
-        };
+            DataHazardPolicy::DataForward => {
+                let mem_wb_forward = {
+                    // MEM/WB hazard
+                    let mem_wb_regwrite = self.itl_m_w.wb_flags.mem_to_reg;
+                    let mem_wb_rd = self.itl_m_w.rd;
+                    let ex_mem_rd = self.itl_e_m.rd;
+                    let id_ex_rs1 = self.itl_d_e.rs1;
+                    let id_ex_rs2 = self.itl_d_e.rs2;
+                    if mem_wb_regwrite
+                        && (mem_wb_rd != 0)
+                        && (ex_mem_rd != id_ex_rs1)
+                        && (mem_wb_rd == id_ex_rs1)
+                    {
+                        if self.data_hazard_info {
+                            warn!("MEM/WB data hazard detected, for ALU SRC A");
+                            warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
+                            warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                        }
+                        // forward A from MEM/WB
+                        assert_eq!(self.itl_d_e.forward_a, 0);
+                        self.itl_d_e.forward_a = 0b01;
+                    }
+                    if mem_wb_regwrite
+                        && (mem_wb_rd != 0)
+                        && (ex_mem_rd != id_ex_rs2)
+                        && (mem_wb_rd == id_ex_rs2)
+                    {
+                        if self.data_hazard_info {
+                            warn!("MEM/WB data hazard detected, for ALU SRC B");
+                            warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
+                            warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                        }
+                        // forward B from MEM/WB
+                        assert_eq!(self.itl_d_e.forward_b, 0);
+                        self.itl_d_e.forward_b = 0b01;
+                    }
+
+                    if mem_wb_regwrite
+                        && (mem_wb_rd != 0)
+                        && ((ex_mem_rd != id_ex_rs1) && (mem_wb_rd == id_ex_rs1)
+                            || (ex_mem_rd != id_ex_rs2) && (mem_wb_rd == id_ex_rs2))
+                    {
+                        self.cpu_statistics.data_hazard_count += 1;
+                    }
+                    self.itl_m_w.regval
+                };
+                self.itl_d_e.mem_wb_forward = mem_wb_forward;
+            }
+        }
 
         // function units
         if self.pre_pipeline_info {
@@ -404,13 +549,8 @@ impl<'a> CPU<'a> {
         }
         let running = writeback(&self.itl_m_w, &mut self.reg_file, self.pipeline_info);
         let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm, self.pipeline_info);
-        let (new_itl_e_m, ex_branch, pc_src, new_pc_0, new_pc_1) = exec(
-            &self.itl_d_e,
-            ex_mem_forward,
-            mem_wb_forward,
-            self.pipeline_info,
-            &mut self.callstack,
-        )?;
+        let (new_itl_e_m, ex_branch, pc_src, new_pc_0, new_pc_1) =
+            exec(&self.itl_d_e, self.pipeline_info, &mut self.callstack)?;
         let new_itl_d_e = decode(&self.reg_file, &self.itl_f_d, self.pipeline_info);
 
         // // decide the pc (by hazard unit) Naive
@@ -434,27 +574,74 @@ impl<'a> CPU<'a> {
         //     }
         // };
 
-        // Fetch code
+        // fetch code
         let new_itl_f_d = fetch(&self.pc, &mut self.vm, self.pipeline_info);
 
         // mispredict
         let mispredict = ex_branch && pc_src; // for now, using `always-not-taken` prediction.
         if mispredict {
+            // compulsory flush
+            // so do not use self.x_y_pipeline_states_set
+            // instead, set directly
             if self.control_hazard_info {
                 warn!("Misprediction detected");
             }
-            e_pipeline_state = e_pipeline_state.max(PipelineState::Bubble);
-            d_pipeline_state = d_pipeline_state.max(PipelineState::Bubble);
+            self.cpu_statistics.control_hazard_count += 1;
+            self.cpu_statistics.control_hazard_delayed_cycles += 2;
+            self.d_e_pipeline_states[0] = PipelineState::Bubble;
+            self.f_d_pipeline_states[0] = PipelineState::Bubble;
+            self.pc_next_states[0] = PipelineState::Normal;
         }
 
         // handle load-use hazard
         if load_use_detected {
-            e_pipeline_state = e_pipeline_state.max(PipelineState::Bubble);
-            d_pipeline_state = d_pipeline_state.max(PipelineState::Stall);
-            f_pipeline_state = f_pipeline_state.max(PipelineState::Stall);
+            match self.data_hazard_policy {
+                DataHazardPolicy::NaiveStall => {
+                    // self.m_w_pipeline_states_set(&mut [
+                    //     PipelineState::Normal,
+                    //     PipelineState::Normal,
+                    //     PipelineState::Bubble,
+                    // ]);
+                    // self.e_m_pipeline_states_set(&mut [
+                    //     PipelineState::Normal,
+                    //     PipelineState::Bubble,
+                    //     PipelineState::Stall,
+                    // ]);
+                    // self.d_e_pipeline_states_set(&mut [
+                    //     PipelineState::Bubble,
+                    //     PipelineState::Stall,
+                    //     PipelineState::Stall,
+                    // ]);
+                    // self.f_d_pipeline_states_set(&mut [
+                    //     PipelineState::Stall,
+                    //     PipelineState::Stall,
+                    //     PipelineState::Stall,
+                    // ]);
+                    // self.pc_next_states_set(&mut [
+                    //     PipelineState::Stall,
+                    //     PipelineState::Stall,
+                    //     PipelineState::Stall,
+                    // ]);
+                }
+                DataHazardPolicy::DataForward => {
+                    // e_pipeline_state = e_pipeline_state.max(PipelineState::Bubble);
+                    self.d_e_pipeline_states_set(&mut [PipelineState::Bubble]);
+                    // d_pipeline_state = d_pipeline_state.max(PipelineState::Stall);
+                    self.f_d_pipeline_states_set(&mut [PipelineState::Stall]);
+                    // f_pipeline_state = f_pipeline_state.max(PipelineState::Stall);
+                    self.pc_next_states_set(&mut [PipelineState::Stall]);
+                    self.cpu_statistics.data_hazard_delayed_cycles += 1;
+                }
+            }
         }
 
-        let next_pc = match f_pipeline_state {
+        let m_w_pipeline_state = self.m_w_pipeline_states[0];
+        let e_m_pipeline_state = self.e_m_pipeline_states[0];
+        let d_e_pipeline_state = self.d_e_pipeline_states[0];
+        let f_d_pipeline_state = self.f_d_pipeline_states[0];
+        let pc_next_state = self.pc_next_states[0];
+
+        let next_pc = match pc_next_state {
             PipelineState::Stall => self.pc.read(),
             PipelineState::Bubble => unreachable!(),
             PipelineState::Normal => {
@@ -473,13 +660,25 @@ impl<'a> CPU<'a> {
             info!("EX: PC decided {} {:#x}", pc_src, next_pc);
         }
 
-        let new_itl_d_e = match e_pipeline_state {
-            PipelineState::Normal => new_itl_d_e,
-            PipelineState::Bubble => InternalDecodeExec::default(),
-            PipelineState::Stall => unreachable!(),
+        let new_itl_m_w = match m_w_pipeline_state {
+            PipelineState::Normal => new_itl_m_w,
+            PipelineState::Bubble => InternalMemWb::default(),
+            PipelineState::Stall => self.itl_m_w,
         };
 
-        let new_itl_f_d = match d_pipeline_state {
+        let new_itl_e_m = match e_m_pipeline_state {
+            PipelineState::Normal => new_itl_e_m,
+            PipelineState::Bubble => InternalExecMem::default(),
+            PipelineState::Stall => self.itl_e_m,
+        };
+
+        let new_itl_d_e = match d_e_pipeline_state {
+            PipelineState::Normal => new_itl_d_e,
+            PipelineState::Bubble => InternalDecodeExec::default(),
+            PipelineState::Stall => self.itl_d_e,
+        };
+
+        let new_itl_f_d = match f_d_pipeline_state {
             PipelineState::Normal => new_itl_f_d,
             PipelineState::Bubble => InternalFetchDecode::default(),
             PipelineState::Stall => self.itl_f_d,
@@ -509,7 +708,55 @@ impl<'a> CPU<'a> {
 
         // decide whether continue to run
         self.running = running;
+
+        self.m_w_pipeline_states.rotate_left(1);
+        self.m_w_pipeline_states[PIPELINE_STATES_DEPTH - 1] = PipelineState::Normal;
+        self.e_m_pipeline_states.rotate_left(1);
+        self.e_m_pipeline_states[PIPELINE_STATES_DEPTH - 1] = PipelineState::Normal;
+        self.d_e_pipeline_states.rotate_left(1);
+        self.d_e_pipeline_states[PIPELINE_STATES_DEPTH - 1] = PipelineState::Normal;
+        self.f_d_pipeline_states.rotate_left(1);
+        self.f_d_pipeline_states[PIPELINE_STATES_DEPTH - 1] = PipelineState::Normal;
+        self.pc_next_states.rotate_left(1);
+        self.pc_next_states[PIPELINE_STATES_DEPTH - 1] = PipelineState::Normal;
         Ok(())
+    }
+
+    #[allow(unused)]
+    fn m_w_pipeline_states_set(&mut self, states: &mut [PipelineState]) {
+        (0..self.m_w_pipeline_states.len().min(states.len())).for_each(|i| {
+            let x = &mut self.m_w_pipeline_states[i];
+            *x = *x.max(&mut states[i]);
+        });
+    }
+
+    #[allow(unused)]
+    fn e_m_pipeline_states_set(&mut self, states: &mut [PipelineState]) {
+        (0..self.e_m_pipeline_states.len().min(states.len())).for_each(|i| {
+            let x = &mut self.e_m_pipeline_states[i];
+            *x = *x.max(&mut states[i]);
+        });
+    }
+
+    fn d_e_pipeline_states_set(&mut self, states: &mut [PipelineState]) {
+        (0..self.d_e_pipeline_states.len().min(states.len())).for_each(|i| {
+            let x = &mut self.d_e_pipeline_states[i];
+            *x = *x.max(&mut states[i]);
+        });
+    }
+
+    fn f_d_pipeline_states_set(&mut self, states: &mut [PipelineState]) {
+        (0..self.f_d_pipeline_states.len().min(states.len())).for_each(|i| {
+            let x = &mut self.f_d_pipeline_states[i];
+            *x = *x.max(&mut states[i]);
+        });
+    }
+
+    fn pc_next_states_set(&mut self, states: &mut [PipelineState]) {
+        (0..self.pc_next_states.len().min(states.len())).for_each(|i| {
+            let x = &mut self.pc_next_states[i];
+            *x = *x.max(&mut states[i]);
+        });
     }
 }
 

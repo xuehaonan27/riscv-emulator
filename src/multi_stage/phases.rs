@@ -35,6 +35,8 @@ pub struct InternalDecodeExec {
     pub imm: u64,
     pub forward_a: u8,
     pub forward_b: u8,
+    pub ex_mem_forward: u64,
+    pub mem_wb_forward: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -129,6 +131,8 @@ impl Default for InternalDecodeExec {
             imm: 0,
             forward_a: 0,
             forward_b: 0,
+            ex_mem_forward: 0,
+            mem_wb_forward: 0,
         }
     }
 }

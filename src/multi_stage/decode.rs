@@ -46,6 +46,8 @@ pub fn decode(
         imm,
         forward_a: 0, // default using self
         forward_b: 0, // default using self
+        ex_mem_forward: 0, // set by data forwarding logic
+        mem_wb_forward: 0, // set by data forwarding logic
     };
 
     itl_d_e
