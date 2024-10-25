@@ -65,7 +65,7 @@ def process_file(file_name: str):
         }
         """
         s = tables[entry['test_name']]
-        s += f"| {config_name} | {entry['run_clock']} | {entry['valid_instructions']} | {entry['CPI']} | {entry['data_hazard_count']} | {entry['data_hazard_delayed_cycles']} | {entry['control_hazard_count']} | {entry['control_hazard_delayed_cycles']} |\n"
+        s += f"| {config_name} | {entry['run_clock']} | {entry['valid_instructions']} | {float(entry['CPI']):.3f} | {entry['data_hazard_count']} | {entry['data_hazard_delayed_cycles']} | {entry['control_hazard_count']} | {entry['control_hazard_delayed_cycles']} |\n"
         tables[entry['test_name']] = s
     f.close()
 
