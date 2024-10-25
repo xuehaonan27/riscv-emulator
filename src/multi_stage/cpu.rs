@@ -3,6 +3,7 @@ use log::{debug, error, info, trace, warn};
 use crate::{
     callstack::CallStack,
     core::{
+        insts::Inst64,
         reg::{ProgramCounter, RegisterFile},
         utils::reg_name_by_id,
         vm::VirtualMemory,
@@ -918,6 +919,28 @@ pub struct MultistageCPU<'a> {
     itl_m_w: InternalMemWb,
 
     cpu_statistics: CPUStatistics,
+
+    last_inst_info: LastInstInfo,
+}
+
+struct LastInstInfo {
+    alu_op: Inst64,
+    rs1: u8,
+    rs2: u8,
+}
+
+impl LastInstInfo {
+    pub fn new() -> Self {
+        Self {
+            alu_op: Inst64::noop,
+            rs1: 0,
+            rs2: 0,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::new()
+    }
 }
 
 impl<'a> MultistageCPU<'a> {
@@ -944,6 +967,7 @@ impl<'a> MultistageCPU<'a> {
             itl_e_m: InternalExecMem::default(),
             itl_m_w: InternalMemWb::default(),
             cpu_statistics: CPUStatistics::default(),
+            last_inst_info: LastInstInfo::new(),
         }
     }
 
@@ -1005,6 +1029,7 @@ impl<'a> MultistageCPU<'a> {
     }
 
     pub(super) fn exec_once(&mut self) -> Result<()> {
+        use crate::core::insts::Inst64::*;
         // begin the clock
         self.clock += 1;
 
@@ -1026,6 +1051,33 @@ impl<'a> MultistageCPU<'a> {
         let (new_itl_e_m, new_pc_0, new_pc_1) =
             exec(&self.itl_d_e, self.itrace, &mut self.callstack, None)?;
         self.itl_e_m = new_itl_e_m;
+
+        match new_itl_e_m.alu_op {
+            d @ (div | divu | divuw | divw) => {
+                self.last_inst_info.alu_op = d;
+                self.last_inst_info.rs1 = new_itl_e_m.rs1;
+                self.last_inst_info.rs2 = new_itl_e_m.rs2;
+                self.clock += 40;
+            }
+            r @ (rem | remu | remuw | remw) => {
+                match (self.last_inst_info.alu_op, r) {
+                    (div, rem) | (divu, remu) | (divuw, remuw) | (divw, remw)
+                        if self.last_inst_info.rs1 == new_itl_e_m.rs1
+                            && self.last_inst_info.rs2 == new_itl_e_m.rs2 => {}
+                    _ => {
+                        self.clock += 40;
+                    }
+                }
+                self.last_inst_info.clear();
+            }
+            mul | mulh | mulhsu | mulhu | mulw => {
+                self.clock += 1;
+                self.last_inst_info.clear();
+            }
+            _ => {
+                self.last_inst_info.clear();
+            }
+        }
 
         let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm, self.itrace);
         self.itl_m_w = new_itl_m_w;
