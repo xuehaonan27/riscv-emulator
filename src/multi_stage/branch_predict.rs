@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use log::warn;
-
 use super::cpu::PredictPolicy;
 
 /// Branch history table

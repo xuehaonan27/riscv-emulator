@@ -43,11 +43,11 @@ struct Args {
 
     /// Data hazard policy
     #[arg(long)]
-    data_hazard_policy: DataHazardPolicy,
+    data_hazard_policy: Option<DataHazardPolicy>,
 
     /// Control policy
     #[arg(long)]
-    control_policy: ControlPolicy,
+    control_policy: Option<ControlPolicy>,
 
     /// Branch prediction policy
     #[arg(long)]
@@ -74,7 +74,7 @@ struct Args {
     data_hazard_info: bool,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
 enum CPUMode {
     Single,
     Multi,
@@ -93,10 +93,23 @@ fn main() {
     let mtrace = args.mtrace;
     let ftrace = args.ftrace;
     let cpu_mode = args.cpu_mode;
-    let data_hazard_policy = args.data_hazard_policy;
-    let control_policy = args.control_policy;
+    let data_hazard_policy = if cpu_mode == CPUMode::Pipeline {
+        args.data_hazard_policy
+            .expect("Must give data hazard policy if pipeline CPU is used")
+    } else {
+        DataHazardPolicy::NaiveStall /* Useless */
+    };
+    let control_policy = if cpu_mode == CPUMode::Pipeline {
+        args.control_policy
+            .expect("Must give control hazard policy if pipeline CPU is used")
+    } else {
+        ControlPolicy::AlwaysNotTaken /* Useless */
+    };
     let predict_policy = if control_policy == ControlPolicy::DynamicPredict {
-        Some(args.predict_policy.expect("Must give predict policy if dynamic prediction is used"))
+        Some(
+            args.predict_policy
+                .expect("Must give predict policy if dynamic prediction is used"),
+        )
     } else {
         None
     };
@@ -131,7 +144,13 @@ fn main() {
                 redb.run();
             }
         }
-        CPUMode::Multi => {}
+        CPUMode::Multi => {
+            use multi_stage::cpu::MultistageCPU;
+            let mut cpu = MultistageCPU::new(&mut vm, &mut callstack, itrace);
+            cpu.init_elfinfo_64(&elf_info);
+            cpu.cpu_exec(None).expect("Failed to execute the program");
+            cpu.print_info();
+        }
         CPUMode::Pipeline => {
             use multi_stage::{cpu::CPU, debug::REDB};
             let mut cpu = CPU::new(

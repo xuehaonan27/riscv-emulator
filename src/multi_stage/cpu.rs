@@ -510,10 +510,6 @@ impl<'a> CPU<'a> {
                     }
                     self.cpu_statistics.data_hazard_count += 1;
                     self.cpu_statistics.data_hazard_delayed_cycles += 1;
-                    // self.e_m_pipeline_states_set(&mut [PipelineState::Bubble]);
-                    // self.d_e_pipeline_states_set(&mut [PipelineState::Stall]); // ?
-                    // self.f_d_pipeline_states_set(&mut [PipelineState::Stall]);
-                    // self.pc_next_states_set(&mut [PipelineState::Stall]);
 
                     self.d_e_pipeline_states_set(&mut [PipelineState::Bubble]); // ?
                     self.f_d_pipeline_states_set(&mut [PipelineState::Stall]);
@@ -585,34 +581,13 @@ impl<'a> CPU<'a> {
         }
         let running = writeback(&self.itl_m_w, &mut self.reg_file, self.pipeline_info);
         let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm, self.pipeline_info);
-        let (new_itl_e_m, ex_branch, pc_src, new_pc_0, new_pc_1) = exec(
+        let (new_itl_e_m, new_pc_0, new_pc_1) = exec(
             &self.itl_d_e,
             self.pipeline_info,
             &mut self.callstack,
-            &mut self.ras,
+            Some(&mut self.ras),
         )?;
         let new_itl_d_e = decode(&self.reg_file, &self.itl_f_d, self.pipeline_info);
-
-        // // decide the pc (by hazard unit) Naive
-        // let next_pc = if should_stall {
-        //     // if the CPU should stall, then Hazard Detect Unit should keep pc unchanged.
-        //     self.pc.read()
-        // } else {
-        //     if ex_branch {
-        //         // if Exec phase is a branch instruction, then decide new pc according to `pc_src` flag.
-        //         if pc_src {
-        //             new_pc_1
-        //         } else {
-        //             // if do not use new pc, then we should recover the pc seen by the branch instruction!
-        //             new_pc_0
-        //         }
-        //     } else {
-        //         assert!(!pc_src); // pc_src must be false!
-        //                           // if Exec phase is not a branch instruction, then new pc should add by itself,
-        //                           // instead of fetching `pc+4` from Exec phase instruction.
-        //         self.pc.read().wrapping_add(4)
-        //     }
-        // };
 
         // fetch code
         let new_itl_f_d = fetch(
@@ -622,7 +597,7 @@ impl<'a> CPU<'a> {
             self.control_policy,
             self.bht.as_mut(),
             self.btb.as_ref(),
-            &mut self.ras,
+            Some(&mut self.ras),
         );
 
         // handle executed branch instruction
@@ -663,8 +638,7 @@ impl<'a> CPU<'a> {
         // mispredict
         let mispredict = ex_branch
             && ((pc_src != predicted_src)
-                || (new_itl_e_m.is_ret()
-                    && new_pc_1 != new_itl_e_m.branch_flags.predicted_target));
+                || (new_itl_e_m.is_ret() && new_pc_1 != new_itl_e_m.branch_flags.predicted_target));
         if mispredict {
             // compulsory flush
             // so do not use self.x_y_pipeline_states_set
@@ -907,4 +881,171 @@ pub fn halt(pc: u64, code: u64) {
         info!("HIT GOOD TRAP!\n");
     }
     info!("Program ended at pc {:#x}, with exit code {}", pc, code);
+}
+
+pub struct MultistageCPU<'a> {
+    // indicate whether the CPU is running
+    running: bool,
+
+    // clock
+    clock: u64,
+
+    // General purpose register file
+    reg_file: RegisterFile,
+
+    // Program counter (PC) which is not included in general purpose register file.
+    pc: ProgramCounter,
+
+    // Reference to virtual memory
+    vm: &'a mut VirtualMemory,
+
+    // Reference to call stack
+    callstack: &'a mut CallStack<'a>,
+
+    // Itrace switch
+    itrace: bool,
+
+    // IF / ID
+    itl_f_d: InternalFetchDecode,
+
+    // ID / Exec
+    itl_d_e: InternalDecodeExec,
+
+    // Exec / Mem
+    itl_e_m: InternalExecMem,
+
+    // Mem / Wb
+    itl_m_w: InternalMemWb,
+
+    cpu_statistics: CPUStatistics,
+}
+
+impl<'a> MultistageCPU<'a> {
+    pub fn new(
+        vm: &'a mut VirtualMemory,
+        callstack: &'a mut CallStack<'a>,
+        itrace: bool,
+    ) -> MultistageCPU<'a> {
+        // x0 already set to 0
+        let reg_file = RegisterFile::empty();
+        let pc = ProgramCounter::new();
+
+        MultistageCPU {
+            running: false,
+            // continue_fetch: true,
+            clock: 0,
+            reg_file,
+            pc,
+            vm,
+            callstack,
+            itrace,
+            itl_f_d: InternalFetchDecode::default(),
+            itl_d_e: InternalDecodeExec::default(),
+            itl_e_m: InternalExecMem::default(),
+            itl_m_w: InternalMemWb::default(),
+            cpu_statistics: CPUStatistics::default(),
+        }
+    }
+
+    /// Initialize CPU with ELF info
+    pub fn init_elfinfo_64(&mut self, info: &LoadElfInfo) {
+        // make sure we are running a ELF64 executable
+        assert!(info.is_64_bit());
+
+        self.reg_file.init_elfinfo_64(info);
+
+        let pc = info.entry_point();
+
+        // Load program counter
+        self.pc.write(pc);
+
+        // Load pc into pipeline registers
+        self.itl_f_d.pc = pc;
+        self.itl_d_e.pc = pc;
+        self.itl_e_m.pc = pc;
+        self.itl_m_w.pc = pc;
+    }
+
+    /// Run the cpu.
+    /// steps: how many steps should be run, [`None`] means run until end or
+    /// exception raised.
+    pub fn cpu_exec(&mut self, steps: Option<i32>) -> Result<()> {
+        self.running = true;
+        let mut i = 0;
+
+        while self.running {
+            if steps.is_some_and(|n| i >= n) {
+                break;
+            }
+            self.exec_once()?;
+            i += 1;
+        }
+
+        Ok(())
+    }
+
+    pub fn print_info(&self) {
+        info!("CPU run clock: {}", self.clock);
+        info!(
+            "CPU data hazard count: {}",
+            self.cpu_statistics.data_hazard_count
+        );
+        info!(
+            "CPU data hazard delayed cycles: {}",
+            self.cpu_statistics.data_hazard_delayed_cycles
+        );
+        info!(
+            "CPU control hazard count: {}",
+            self.cpu_statistics.control_hazard_count
+        );
+        info!(
+            "CPU control hazard delayed cycles: {}",
+            self.cpu_statistics.control_hazard_delayed_cycles
+        );
+    }
+
+    pub(super) fn exec_once(&mut self) -> Result<()> {
+        // begin the clock
+        self.clock += 1;
+
+        // fetch code
+        let new_itl_f_d = fetch(
+            &self.pc,
+            &mut self.vm,
+            self.itrace,
+            ControlPolicy::AlwaysNotTaken,
+            None,
+            None,
+            None,
+        );
+        self.itl_f_d = new_itl_f_d;
+
+        let new_itl_d_e = decode(&self.reg_file, &self.itl_f_d, self.itrace);
+        self.itl_d_e = new_itl_d_e;
+
+        let (new_itl_e_m, new_pc_0, new_pc_1) =
+            exec(&self.itl_d_e, self.itrace, &mut self.callstack, None)?;
+        self.itl_e_m = new_itl_e_m;
+
+        let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm, self.itrace);
+        self.itl_m_w = new_itl_m_w;
+
+        let running = writeback(&self.itl_m_w, &mut self.reg_file, self.itrace);
+
+        let next_pc = if new_itl_e_m.branch_flags.pc_src {
+            new_pc_1
+        } else {
+            new_pc_0
+        };
+
+        self.pc.write(next_pc);
+
+        // reset x0 to 0
+        self.reg_file.write(0, 0);
+
+        // decide whether continue to run
+        self.running = running;
+
+        Ok(())
+    }
 }

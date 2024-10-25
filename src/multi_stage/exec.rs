@@ -16,8 +16,8 @@ pub fn exec(
     itl_d_e: &InternalDecodeExec,
     pipeline_info: bool,
     callstack: &mut CallStack,
-    ras: &mut RAS,
-) -> Result<(InternalExecMem, bool, bool, u64, u64)> {
+    ras: Option<&mut RAS>,
+) -> Result<(InternalExecMem, u64, u64)> {
     use crate::core::insts::Inst64::*;
     if pipeline_info {
         trace!("EX : {}", e_pinst(itl_d_e));
@@ -127,8 +127,10 @@ pub fn exec(
 
             // call
             let is_call = itl_d_e.rd == 1;
-            if is_call {
-                ras.push(result);
+            if let Some(ras) = ras {
+                if is_call {
+                    ras.push(result);
+                }
             }
             callstack.call(pc, new_pc_1);
 
@@ -445,5 +447,5 @@ pub fn exec(
         alu_op: itl_d_e.exec_flags.alu_op,
     };
 
-    Ok((itl_e_m, ex_branch, pc_src, new_pc_0, new_pc_1))
+    Ok((itl_e_m, new_pc_0, new_pc_1))
 }

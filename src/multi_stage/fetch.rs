@@ -27,7 +27,7 @@ pub fn fetch(
     control_policy: ControlPolicy,
     bht: Option<&mut BHT>,
     btb: Option<&BTB>,
-    ras: &mut RAS,
+    ras: Option<&mut RAS>,
 ) -> InternalFetchDecode {
     let pc = pc.read();
     let inst = vm.fetch_inst_pipeline(pc as usize);
@@ -35,7 +35,7 @@ pub fn fetch(
     inst.and_then(|inst| inst_interpret(pc, inst))
         .map(|itl| {
             if pipeline_info {
-                trace!("IF : {}", f_pinst(&itl));
+                    trace!("IF : {}", f_pinst(&itl));
             }
             itl
         })
@@ -48,21 +48,13 @@ pub fn fetch(
                     pipeline_info,
                     bht.unwrap(),
                     btb.unwrap(),
-                    ras,
+                    ras.unwrap(),
                 )
             } else {
                 itl
             }
         })
         .unwrap_or_else(|_| InternalFetchDecode::default())
-
-    // if let Ok(inst) = inst {
-    //     let itl = inst_interpret(pc, inst);
-    //     trace!("IF : {}", f_pinst(&itl));
-    //     Ok(itl)
-    // } else {
-    //     Ok(InternalFetchDecode::default())
-    // }
 }
 
 fn branch_predict(
