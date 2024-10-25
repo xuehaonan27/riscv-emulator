@@ -1077,10 +1077,9 @@ impl<'a> MultistageCPU<'a> {
 
     pub(super) fn exec_once(&mut self) -> Result<()> {
         use crate::core::insts::Inst64::*;
-        // begin the clock
-        self.clock += 1;
 
         // fetch code
+        self.clock += 1;
         let new_itl_f_d = fetch(
             &self.pc,
             &mut self.vm,
@@ -1092,9 +1091,11 @@ impl<'a> MultistageCPU<'a> {
         );
         self.itl_f_d = new_itl_f_d;
 
+        self.clock += 1;
         let new_itl_d_e = decode(&self.reg_file, &self.itl_f_d, self.itrace);
         self.itl_d_e = new_itl_d_e;
 
+        self.clock += 1;
         let (new_itl_e_m, new_pc_0, new_pc_1) =
             exec(&self.itl_d_e, self.itrace, &mut self.callstack, None)?;
         self.itl_e_m = new_itl_e_m;
@@ -1130,9 +1131,17 @@ impl<'a> MultistageCPU<'a> {
             self.cpu_statistics.executed_inst_count += 1;
         }
 
+        if self.itl_e_m.mem_flags.mem_read || self.itl_e_m.mem_flags.mem_write {
+            // begin the clock
+            self.clock += 1;
+        }
         let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm, self.itrace);
         self.itl_m_w = new_itl_m_w;
 
+        if self.itl_m_w.wb_flags.mem_to_reg {
+            // begin the clock
+            self.clock += 1;
+        }
         let running = writeback(&self.itl_m_w, &mut self.reg_file, self.itrace);
 
         let next_pc = if new_itl_e_m.branch_flags.pc_src {
