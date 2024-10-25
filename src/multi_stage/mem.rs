@@ -67,6 +67,7 @@ pub fn mem(
     }
 
     InternalMemWb {
+        raw_inst: itl_e_m.raw_inst,
         wb_flags: itl_e_m.wb_flags,
         branch_flags: itl_e_m.branch_flags,
         mem_read,

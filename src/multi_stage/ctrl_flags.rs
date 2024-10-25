@@ -25,6 +25,8 @@ impl DecodeFlags {
 pub struct BranchFlags {
     pub branch: bool,
     pub pc_src: bool,
+    pub predicted_src: bool,
+    pub predicted_target: u64,
 }
 
 impl BranchFlags {

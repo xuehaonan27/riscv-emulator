@@ -1,3 +1,4 @@
+pub mod branch_predict;
 pub mod cpu;
 pub mod ctrl_flags;
 pub mod debug;

@@ -12,7 +12,13 @@ use crate::{
 };
 
 use super::{
-    decode::decode, exec::exec, fetch::fetch, hazard::HazardDetectionUnit, mem::mem, phases::*,
+    branch_predict::{BHT, BTB, RAS},
+    decode::decode,
+    exec::exec,
+    fetch::fetch,
+    hazard::HazardDetectionUnit,
+    mem::mem,
+    phases::*,
     writeback::writeback,
 };
 
@@ -73,8 +79,14 @@ pub enum DataHazardPolicy {
 pub enum ControlPolicy {
     AllStall,       // stall when branch instructions encountered
     AlwaysNotTaken, // static branch prediction: always not taken
-    AlwaysTaken,    // static branch prediction: always taken
+    // AlwaysTaken,    // static branch prediction: always taken
     DynamicPredict, // dynamic branch prediction
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum PredictPolicy {
+    OneBitPredict,
+    TwoBitsPredict,
 }
 
 #[derive(Debug, Clone)]
@@ -175,6 +187,15 @@ pub struct CPU<'a> {
     // Statistics data of CPU
     cpu_statistics: CPUStatistics,
 
+    // Branch history table
+    bht: Option<BHT>,
+
+    // Branch target buffer
+    btb: Option<BTB>,
+
+    // Return address stack
+    ras: RAS,
+
     // HazardResolveUnit
     hazard_detection_unit: HazardDetectionUnit,
     // Remaining stall clocks
@@ -188,6 +209,7 @@ impl<'a> CPU<'a> {
         itrace: bool,
         data_hazard_policy: DataHazardPolicy,
         control_policy: ControlPolicy,
+        predict_policy: Option<PredictPolicy>,
         pre_pipeline_info: bool,
         pipeline_info: bool,
         post_pipeline_info: bool,
@@ -197,6 +219,17 @@ impl<'a> CPU<'a> {
         // x0 already set to 0
         let reg_file = RegisterFile::empty();
         let pc = ProgramCounter::new();
+
+        let bht = if let Some(predict_policy) = predict_policy {
+            Some(BHT::new(predict_policy))
+        } else {
+            None
+        };
+        let btb = if let Some(predict_policy) = predict_policy {
+            Some(BTB::new())
+        } else {
+            None
+        };
 
         CPU {
             running: false,
@@ -229,6 +262,9 @@ impl<'a> CPU<'a> {
                 || control_hazard_info
                 || data_hazard_info,
             cpu_statistics: CPUStatistics::default(),
+            bht,
+            btb,
+            ras: RAS::new(),
             hazard_detection_unit: HazardDetectionUnit::default(),
             // stall: 1,
         }
@@ -549,8 +585,12 @@ impl<'a> CPU<'a> {
         }
         let running = writeback(&self.itl_m_w, &mut self.reg_file, self.pipeline_info);
         let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm, self.pipeline_info);
-        let (new_itl_e_m, ex_branch, pc_src, new_pc_0, new_pc_1) =
-            exec(&self.itl_d_e, self.pipeline_info, &mut self.callstack)?;
+        let (new_itl_e_m, ex_branch, pc_src, new_pc_0, new_pc_1) = exec(
+            &self.itl_d_e,
+            self.pipeline_info,
+            &mut self.callstack,
+            &mut self.ras,
+        )?;
         let new_itl_d_e = decode(&self.reg_file, &self.itl_f_d, self.pipeline_info);
 
         // // decide the pc (by hazard unit) Naive
@@ -575,10 +615,56 @@ impl<'a> CPU<'a> {
         // };
 
         // fetch code
-        let new_itl_f_d = fetch(&self.pc, &mut self.vm, self.pipeline_info);
+        let new_itl_f_d = fetch(
+            &self.pc,
+            &mut self.vm,
+            self.pipeline_info,
+            self.control_policy,
+            self.bht.as_mut(),
+            self.btb.as_ref(),
+            &mut self.ras,
+        );
+
+        // handle executed branch instruction
+        let ex_branch = new_itl_e_m.branch_flags.branch;
+        let pc_src = new_itl_e_m.branch_flags.pc_src;
+        let predicted_src = new_itl_e_m.branch_flags.predicted_src;
+
+        if ex_branch && self.control_policy == ControlPolicy::DynamicPredict {
+            assert!(self.btb.is_some() && self.bht.is_some());
+            // warn!(
+            //     "UPDATE BTB: PC={:#x}, new_pc_1={:#x}",
+            //     new_itl_e_m.pc, new_pc_1
+            // );
+            use crate::core::insts::Inst64::jalr;
+            let is_jalr = new_itl_e_m.alu_op == jalr;
+            // fill BTB with potential new entry
+            // NOTE: branch target is calculated at EX phase.
+            self.btb
+                .as_mut()
+                .unwrap()
+                .add_entry(new_itl_e_m.pc, new_pc_1, is_jalr); // new_pc_1 is branch target
+                                                               // update BHT
+            self.bht
+                .as_mut()
+                .unwrap()
+                .update_with_result(new_itl_e_m.pc, pc_src);
+        }
+
+        // debug!("Before checking misprediction:");
+        // debug!("Current itl_e_m instruction: {:?}", new_itl_e_m.alu_op);
+        // debug!("ex_branch={ex_branch}");
+        // debug!("pc_src={pc_src}");
+        // debug!("predicted_src={predicted_src}");
+        // debug!("self.itl_e_m.is_ret()={}", new_itl_e_m.is_ret());
+        // debug!("new_pc_1={:#x}",new_pc_1);
+        // debug!("self.itl_e_m.branch_flags.predicted_target={:#x}",new_itl_e_m.branch_flags.predicted_target);
 
         // mispredict
-        let mispredict = ex_branch && pc_src; // for now, using `always-not-taken` prediction.
+        let mispredict = ex_branch
+            && ((pc_src != predicted_src)
+                || (new_itl_e_m.is_ret()
+                    && new_pc_1 != new_itl_e_m.branch_flags.predicted_target));
         if mispredict {
             // compulsory flush
             // so do not use self.x_y_pipeline_states_set
@@ -596,33 +682,7 @@ impl<'a> CPU<'a> {
         // handle load-use hazard
         if load_use_detected {
             match self.data_hazard_policy {
-                DataHazardPolicy::NaiveStall => {
-                    // self.m_w_pipeline_states_set(&mut [
-                    //     PipelineState::Normal,
-                    //     PipelineState::Normal,
-                    //     PipelineState::Bubble,
-                    // ]);
-                    // self.e_m_pipeline_states_set(&mut [
-                    //     PipelineState::Normal,
-                    //     PipelineState::Bubble,
-                    //     PipelineState::Stall,
-                    // ]);
-                    // self.d_e_pipeline_states_set(&mut [
-                    //     PipelineState::Bubble,
-                    //     PipelineState::Stall,
-                    //     PipelineState::Stall,
-                    // ]);
-                    // self.f_d_pipeline_states_set(&mut [
-                    //     PipelineState::Stall,
-                    //     PipelineState::Stall,
-                    //     PipelineState::Stall,
-                    // ]);
-                    // self.pc_next_states_set(&mut [
-                    //     PipelineState::Stall,
-                    //     PipelineState::Stall,
-                    //     PipelineState::Stall,
-                    // ]);
-                }
+                DataHazardPolicy::NaiveStall => {}
                 DataHazardPolicy::DataForward => {
                     // e_pipeline_state = e_pipeline_state.max(PipelineState::Bubble);
                     self.d_e_pipeline_states_set(&mut [PipelineState::Bubble]);
@@ -640,25 +700,6 @@ impl<'a> CPU<'a> {
         let d_e_pipeline_state = self.d_e_pipeline_states[0];
         let f_d_pipeline_state = self.f_d_pipeline_states[0];
         let pc_next_state = self.pc_next_states[0];
-
-        let next_pc = match pc_next_state {
-            PipelineState::Stall => self.pc.read(),
-            PipelineState::Bubble => unreachable!(),
-            PipelineState::Normal => {
-                if mispredict {
-                    new_pc_1
-                } else {
-                    self.pc.read().wrapping_add(4)
-                }
-            }
-        };
-        // If using NaivePolicy (Stall 3 cycles) then nothing special need to be done.
-        // Write back pc
-        self.pc.write(next_pc);
-
-        if self.clock_info {
-            info!("EX: PC decided {} {:#x}", pc_src, next_pc);
-        }
 
         let new_itl_m_w = match m_w_pipeline_state {
             PipelineState::Normal => new_itl_m_w,
@@ -689,6 +730,39 @@ impl<'a> CPU<'a> {
         self.itl_e_m = new_itl_e_m;
         self.itl_d_e = new_itl_d_e;
         self.itl_f_d = new_itl_f_d;
+
+        let next_pc = match pc_next_state {
+            PipelineState::Stall => self.pc.read(),
+            PipelineState::Bubble => unreachable!(),
+            PipelineState::Normal => {
+                if mispredict {
+                    // rollback pc
+                    // if new_itl_f_d is a branch inst, don't mind it.
+                    // because that's a misfetched instruction.
+                    if pc_src {
+                        // if should taken
+                        new_pc_1
+                    } else {
+                        new_pc_0
+                    }
+                } else {
+                    // normal execution
+                    if new_itl_f_d.branch_flags.predicted_src {
+                        // Fetch phase decides that predicted
+                        new_itl_f_d.branch_flags.predicted_target
+                    } else {
+                        self.pc.read().wrapping_add(4)
+                    }
+                }
+            }
+        };
+        // If using NaivePolicy (Stall 3 cycles) then nothing special need to be done.
+        // Write back pc
+        self.pc.write(next_pc);
+
+        if self.clock_info {
+            info!("EX: PC decided {} {:#x}", pc_src, next_pc);
+        }
 
         if self.post_pipeline_info {
             info!("MEM/WB {:#x} {:#?}", self.itl_m_w.pc, self.itl_m_w.alu_op);

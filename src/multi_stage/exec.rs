@@ -1,6 +1,6 @@
 use std::ops::{BitAnd, BitOr, BitXor};
 
-use log::{trace, warn};
+use log::{debug, trace, warn};
 
 use crate::{
     callstack::CallStack, core::insts::{
@@ -10,12 +10,13 @@ use crate::{
     }, error::{Error, Exception, Result}, multi_stage::{ctrl_flags::BranchFlags, debug::e_pinst}
 };
 
-use super::phases::{InternalDecodeExec, InternalExecMem};
+use super::{branch_predict::RAS, phases::{InternalDecodeExec, InternalExecMem}};
 
 pub fn exec(
     itl_d_e: &InternalDecodeExec,
     pipeline_info: bool,
     callstack: &mut CallStack,
+    ras: &mut RAS,
 ) -> Result<(InternalExecMem, bool, bool, u64, u64)> {
     use crate::core::insts::Inst64::*;
     if pipeline_info {
@@ -125,6 +126,10 @@ pub fn exec(
             let result = new_pc_0;
 
             // call
+            let is_call = itl_d_e.rd == 1;
+            if is_call {
+                ras.push(result);
+            }
             callstack.call(pc, new_pc_1);
 
             result
@@ -143,8 +148,8 @@ pub fn exec(
             result
         }
         beq => {
+            new_pc_1 = pc.wrapping_add(imm);
             if src1 == src2 {
-                new_pc_1 = pc.wrapping_add(imm);
                 pc_src = true;
             } else {
                 pc_src = false;
@@ -152,36 +157,36 @@ pub fn exec(
             0
         }
         bge => {
+            new_pc_1 = pc.wrapping_add(imm);
             if (src1 as i64) >= (src2 as i64) {
-                new_pc_1 = pc.wrapping_add(imm);
                 pc_src = true;
             }
             0
         }
         bgeu => {
+            new_pc_1 = pc.wrapping_add(imm);
             if (src1 as u64) >= (src2 as u64) {
-                new_pc_1 = pc.wrapping_add(imm);
                 pc_src = true;
             }
             0
         }
         blt => {
-            if (src1 as i64) < (src2 as i64) {
-                new_pc_1 = pc.wrapping_add(imm);
+            new_pc_1 = pc.wrapping_add(imm);
+            if (src1 as i64) < (src2 as i64) { 
                 pc_src = true;
             }
             0
         }
         bltu => {
+            new_pc_1 = pc.wrapping_add(imm);
             if (src1 as u64) < (src2 as u64) {
-                new_pc_1 = pc.wrapping_add(imm);
                 pc_src = true;
             }
             0
         }
         bne => {
+            new_pc_1 = pc.wrapping_add(imm);
             if src1 != src2 {
-                new_pc_1 = pc.wrapping_add(imm);
                 pc_src = true;
             }
             0
@@ -418,6 +423,7 @@ pub fn exec(
     };
 
     let itl_e_m = InternalExecMem {
+        raw_inst: itl_d_e.raw_inst,
         mem_flags: itl_d_e.mem_flags,
         wb_flags: itl_d_e.wb_flags,
         branch_flags: BranchFlags {

@@ -3,7 +3,8 @@
 //! do `decode` here to get `rs1`, `rs2` (maybe `rs3`) and `rd` immediately
 //! and leave Decode phase just register file reading.
 
-use log::{error, info, trace};
+use goblin::pe::debug;
+use log::{debug, error, info, trace};
 
 use crate::{
     core::{insts::*, reg::ProgramCounter, vm::VirtualMemory},
@@ -12,12 +13,22 @@ use crate::{
 };
 
 use super::{
+    branch_predict::{BHT, BTB, RAS},
+    cpu::ControlPolicy,
     ctrl_flags::{BranchFlags, DecodeFlags, ExecFlags, MemFlags, SextType, WbFlags},
     phases::InternalFetchDecode,
 };
 
 /// Fetch instruction
-pub fn fetch(pc: &ProgramCounter, vm: &VirtualMemory, pipeline_info: bool) -> InternalFetchDecode {
+pub fn fetch(
+    pc: &ProgramCounter,
+    vm: &VirtualMemory,
+    pipeline_info: bool,
+    control_policy: ControlPolicy,
+    bht: Option<&mut BHT>,
+    btb: Option<&BTB>,
+    ras: &mut RAS,
+) -> InternalFetchDecode {
     let pc = pc.read();
     let inst = vm.fetch_inst_pipeline(pc as usize);
 
@@ -28,6 +39,21 @@ pub fn fetch(pc: &ProgramCounter, vm: &VirtualMemory, pipeline_info: bool) -> In
             }
             itl
         })
+        .map(|itl| {
+            if control_policy == ControlPolicy::DynamicPredict {
+                assert!(bht.is_some() && btb.is_some());
+                branch_predict(
+                    itl,
+                    control_policy,
+                    pipeline_info,
+                    bht.unwrap(),
+                    btb.unwrap(),
+                    ras,
+                )
+            } else {
+                itl
+            }
+        })
         .unwrap_or_else(|_| InternalFetchDecode::default())
 
     // if let Ok(inst) = inst {
@@ -37,6 +63,87 @@ pub fn fetch(pc: &ProgramCounter, vm: &VirtualMemory, pipeline_info: bool) -> In
     // } else {
     //     Ok(InternalFetchDecode::default())
     // }
+}
+
+fn branch_predict(
+    mut itl_f_d: InternalFetchDecode,
+    control_policy: ControlPolicy,
+    pipeline_info: bool,
+    bht: &mut BHT,
+    btb: &BTB,
+    ras: &mut RAS,
+) -> InternalFetchDecode {
+    // predict for next instruction
+    use crate::core::insts::Inst64::*;
+
+    let next_inst_is_control = match itl_f_d.exec_flags.alu_op {
+        beq | bne | blt | bge | bltu | bgeu | jal | jalr => true,
+        _ => false,
+    };
+    if next_inst_is_control {
+        match control_policy {
+            ControlPolicy::AllStall => unimplemented!(),
+            ControlPolicy::AlwaysNotTaken => itl_f_d.branch_flags.predicted_src = false,
+            ControlPolicy::DynamicPredict => {
+                // First check whether BTB is available
+                let target = btb.query_target(itl_f_d.pc);
+                let predicted_src = bht.predict(itl_f_d.pc);
+
+                if let Some(target) = target {
+                    // BTB has information for this pc
+                    match itl_f_d.exec_flags.alu_op {
+                        jalr => {
+                            itl_f_d.branch_flags.predicted_src = true; // always taken!
+                                                                       // ret instruction
+                            let is_ret = itl_f_d.raw_inst == 0x00008067;
+                            // debug!("JALR: is_ret: {is_ret}");
+
+                            // 它不是查询BTB，所以target不能用。jalr一定跳转。
+                            // 如果RAS pop 没有结果（RAS空）那应当给一个地址：自己的pc.不用pc+4：有可能jalr是text段最后一个指令
+
+                            let btb_predict_target = target;
+                            // debug!("btb_predict_target: {target:#x}");
+
+                            itl_f_d.branch_flags.predicted_target = if is_ret {
+                                // debug!("RAS: {:#x?}", ras);
+                                let ras_top = ras.pop();
+                                // debug!("ras_top: {:?}", ras_top);
+                                let ras_predict_target = if let Some(ras_top) = ras_top {
+                                    // debug!("RAS has value: ras_top = {ras_top:#x}");
+                                    ras_top
+                                } else {
+                                    // debug!("RAS empty, using {:#x}", itl_f_d.pc);
+                                    itl_f_d.pc
+                                };
+                                ras_predict_target
+                            } else {
+                                btb_predict_target
+                            };
+                        }
+                        jal => {
+                            itl_f_d.branch_flags.predicted_src = true; // always taken!
+                            itl_f_d.branch_flags.predicted_target = target;
+                        }
+                        beq | bne | blt | bge | bltu | bgeu => {
+                            itl_f_d.branch_flags.predicted_target = target;
+                            itl_f_d.branch_flags.predicted_src = predicted_src;
+                        } //TODO: predict BHT & target pc BTB
+                        _ => unreachable!(),
+                    }
+                } else {
+                    // BTB does not have information for this pc
+                    // compulsory miss!
+                    // we have to wait for the result to be updated
+                    // for now just predict not taken (easiest way)
+                    itl_f_d.branch_flags.predicted_src = false;
+                }
+            }
+        }
+    } else {
+        itl_f_d.branch_flags.predicted_src = false;
+        itl_f_d.branch_flags.predicted_target = 0;
+    }
+    itl_f_d
 }
 
 /// Decode phase.
@@ -111,6 +218,7 @@ fn decode_load(inst: u32) -> Result<InternalFetchDecode> {
     let imm = imm_I(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::I },
         exec_flags: ExecFlags {
             alu_op,
@@ -123,6 +231,8 @@ fn decode_load(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false, // not set until exec phase
+            predicted_src: false,
+            predicted_target: 0,
         },
         wb_flags: WbFlags { mem_to_reg: true },
         pc: 0,
@@ -201,6 +311,7 @@ fn decode_op_imm(inst: u32) -> Result<InternalFetchDecode> {
     };
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::I },
         exec_flags: ExecFlags {
             alu_op,
@@ -214,6 +325,8 @@ fn decode_op_imm(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false, // not set until exec phase
+            predicted_src: false,
+            predicted_target: 0,
         },
         pc: 0,
         rs1,
@@ -233,6 +346,7 @@ fn decode_op_auipc(inst: u32) -> Result<InternalFetchDecode> {
     let imm = imm_U(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::U },
         exec_flags: ExecFlags {
             alu_op,
@@ -246,6 +360,8 @@ fn decode_op_auipc(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false,
+            predicted_src: false,
+            predicted_target: 0,
         },
         pc: 0,
         rs1: 0,
@@ -292,6 +408,7 @@ fn decode_op_imm_32(inst: u32) -> Result<InternalFetchDecode> {
     let rs1 = rs1(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::I },
         exec_flags: ExecFlags {
             alu_op,
@@ -305,6 +422,8 @@ fn decode_op_imm_32(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false, // not set until exec phase
+            predicted_src: false,
+            predicted_target: 0,
         },
         pc: 0,
         rs1,
@@ -337,6 +456,7 @@ fn decode_store(inst: u32) -> Result<InternalFetchDecode> {
     let imm = imm_S(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::S },
         exec_flags: ExecFlags {
             alu_op,
@@ -350,6 +470,8 @@ fn decode_store(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false, // not set until exec phase
+            predicted_src: false,
+            predicted_target: 0,
         },
         pc: 0,
         rs1,
@@ -465,6 +587,7 @@ fn decode_op(inst: u32) -> Result<InternalFetchDecode> {
     let rs2 = rs2(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags {
             sext: SextType::None,
         },
@@ -480,6 +603,8 @@ fn decode_op(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false, // not set until exec phase
+            predicted_src: false,
+            predicted_target: 0,
         },
         pc: 0,
         rs1,
@@ -499,6 +624,7 @@ fn decode_lui(inst: u32) -> Result<InternalFetchDecode> {
     let imm = imm_U(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::U },
         exec_flags: ExecFlags {
             alu_op,
@@ -512,6 +638,8 @@ fn decode_lui(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false, // not set until exec phase
+            predicted_src: false,
+            predicted_target: 0,
         },
         pc: 0,
         rs1: 0,
@@ -586,6 +714,7 @@ fn decode_op_32(inst: u32) -> Result<InternalFetchDecode> {
     let rs2 = rs2(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags {
             sext: SextType::None,
         },
@@ -601,6 +730,8 @@ fn decode_op_32(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false, // not set until exec phase
+            predicted_src: false,
+            predicted_target: 0,
         },
         pc: 0,
         rs1,
@@ -667,6 +798,7 @@ fn decode_branch(inst: u32) -> Result<InternalFetchDecode> {
     let imm = imm_SB(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::B },
         exec_flags: ExecFlags {
             alu_op,
@@ -679,7 +811,9 @@ fn decode_branch(inst: u32) -> Result<InternalFetchDecode> {
         wb_flags: WbFlags { mem_to_reg: false },
         branch_flags: BranchFlags {
             branch: true,
-            pc_src: false, // not set until exec phase
+            pc_src: false,        // not set until exec phase
+            predicted_src: false, // set by branch prediction logic
+            predicted_target: 0,
         },
         pc: 0,
         rs1,
@@ -709,6 +843,7 @@ fn decode_jalr(inst: u32) -> Result<InternalFetchDecode> {
     let imm = imm_I(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::I },
         exec_flags: ExecFlags {
             alu_op,
@@ -721,7 +856,9 @@ fn decode_jalr(inst: u32) -> Result<InternalFetchDecode> {
         wb_flags: WbFlags { mem_to_reg: true },
         branch_flags: BranchFlags {
             branch: true,
-            pc_src: true, // always jump
+            pc_src: true,         // always jump
+            predicted_src: false, // always predicted as taken
+            predicted_target: 0,
         },
         pc: 0,
         rs1,
@@ -741,6 +878,7 @@ fn decode_jal(inst: u32) -> Result<InternalFetchDecode> {
     let imm = imm_UJ(inst);
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags { sext: SextType::J },
         exec_flags: ExecFlags {
             alu_op,
@@ -753,7 +891,9 @@ fn decode_jal(inst: u32) -> Result<InternalFetchDecode> {
         wb_flags: WbFlags { mem_to_reg: true },
         branch_flags: BranchFlags {
             branch: true,
-            pc_src: true, // not set until exec phase
+            pc_src: true,         // not set until exec phase
+            predicted_src: false, // always predicted as taken
+            predicted_target: 0,
         },
         pc: 0,
         rs1: 0,
@@ -797,6 +937,7 @@ fn decode_system(inst: u32) -> Result<InternalFetchDecode> {
     let rs1 = rs1(inst); // zimm for csrrwi, csrrsi, csrrci
 
     let itl_f_d = InternalFetchDecode {
+        raw_inst: inst,
         decode_flags: DecodeFlags {
             sext: SextType::None,
         },
@@ -812,6 +953,8 @@ fn decode_system(inst: u32) -> Result<InternalFetchDecode> {
         branch_flags: BranchFlags {
             branch: false,
             pc_src: false, // not set until exec phase
+            predicted_src: false,
+            predicted_target: 0,
         },
         pc: 0,
         rs1,

@@ -3,7 +3,7 @@ use clap::{Parser, ValueEnum};
 use core::vm::VirtualMemory;
 use elf::read_elf;
 use log::info;
-use multi_stage::cpu::{ControlPolicy, DataHazardPolicy};
+use multi_stage::cpu::{ControlPolicy, DataHazardPolicy, PredictPolicy};
 use std::path;
 
 mod callstack;
@@ -49,6 +49,10 @@ struct Args {
     #[arg(long)]
     control_policy: ControlPolicy,
 
+    /// Branch prediction policy
+    #[arg(long)]
+    predict_policy: Option<PredictPolicy>,
+
     // Pre-execution pipeline register info
     #[arg(long)]
     pre_pipeline_info: bool,
@@ -91,6 +95,12 @@ fn main() {
     let cpu_mode = args.cpu_mode;
     let data_hazard_policy = args.data_hazard_policy;
     let control_policy = args.control_policy;
+    let predict_policy = if control_policy == ControlPolicy::DynamicPredict {
+        Some(args.predict_policy.expect("Must give predict policy if dynamic prediction is used"))
+    } else {
+        None
+    };
+
     let pre_pipeline_info = args.pre_pipeline_info;
     let pipeline_info = args.pipeline_info;
     let post_pipeline_info = args.post_pipeline_info;
@@ -130,6 +140,7 @@ fn main() {
                 itrace,
                 data_hazard_policy,
                 control_policy,
+                predict_policy,
                 pre_pipeline_info,
                 pipeline_info,
                 post_pipeline_info,

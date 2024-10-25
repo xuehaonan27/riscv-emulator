@@ -1,49 +1,24 @@
 #include <trap.h>
 
-#define N 1
-
-int a[N] = {0};
-
-int partition(int *a, int p, int q) {
-	int pivot = a[p];
-	int i = p, j = q;
-	while(i < j) {
-		while(i < j && a[j] > pivot) j --;
-		a[i] = a[j];
-
-		while(i < j && a[i] <= pivot) i ++;
-		a[j] = a[i];
+int ackermann(int m, int n) {
+	if(m == 0) {
+		return n + 1;
+	} else {
+		if(n == 0) {
+			return ackermann(m - 1, 1);
+		} else {
+			return ackermann(m - 1, ackermann(m, n - 1));
+		}
 	}
-
-	a[i] = pivot;
-	return i;
-}
-
-void quick_sort(int *a, int p, int q) {
-	if(p >= q) return;
-
-	int m = partition(a, p, q);
-	quick_sort(a, p, m - 1);
-	quick_sort(a, m + 1, q);
 }
 
 int main() {
-	quick_sort(a, 0, N - 1);
+	int m, n, result;
+    m = 1;
+    n = 2;
 
-	int i;
-	for(i = 0; i < N; i ++) {
-		check(a[i] == i);
-	}
-
-	check(i == N);
-
-	quick_sort(a, 0, N - 1);
-
-	for(i = 0; i < N; i ++) {
-		check(a[i] == i);
-	}
-
-	check(i == N);
+	result = ackermann(m, n);
+    check(result == 4);
 
 	return 0;
 }

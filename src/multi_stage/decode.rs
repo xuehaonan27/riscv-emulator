@@ -32,6 +32,7 @@ pub fn decode(
     };
 
     let itl_d_e = InternalDecodeExec {
+        raw_inst: itl_f_d.raw_inst,
         exec_flags: itl_f_d.exec_flags,
         mem_flags: itl_f_d.mem_flags,
         wb_flags: itl_f_d.wb_flags,

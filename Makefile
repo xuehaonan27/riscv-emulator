@@ -85,6 +85,14 @@ else
 	__CONTROL_POLICY =
 endif
 
+ifeq ($(PREDICT_POLICY), oneBit)
+	__PREDICT_POLICY = --predict-policy one-bit-predict
+else ifeq ($(PREDICT_POLICY), twoBits)
+	__PREDICT_POLICY = --predict-policy two-bits-predict
+else
+	__PREDICT_POLICY =
+endif
+
 all:
 	@echo "-------Build Simulator-------"
 	@$(CARGO) build --release
@@ -99,6 +107,7 @@ all:
 	$(__DATA_HAZARD_INFO) \
 	$(__DATA_HAZARD_POLICY) \
 	$(__CONTROL_POLICY) \
+	$(__PREDICT_POLICY) \
 	$(CPU_MODE) -i ./test/build/$(T).elf
 
 RUST_SRC := src
@@ -120,6 +129,7 @@ $(FILE_NAMES):
 	@$(SIM) $(CPU_MODE) \
 	$(__DATA_HAZARD_POLICY) \
 	$(__CONTROL_POLICY) \
+	$(__PREDICT_POLICY) \
 	-i ./test/build/$@.elf
 
 
