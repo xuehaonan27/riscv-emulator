@@ -64,15 +64,12 @@ pub struct InternalExecMem {
 }
 
 impl InternalExecMem {
-    pub fn is_call(&self) -> bool {
-        self.alu_op == Inst64::jal && self.rd == 1
-    }
-
     pub fn is_ret(&self) -> bool {
         self.raw_inst == 0x00008067
     }
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Copy)]
 pub struct InternalMemWb {
     pub raw_inst: u32,

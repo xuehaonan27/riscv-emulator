@@ -156,7 +156,6 @@ fn main() {
             let mut cpu = CPU::new(
                 &mut vm,
                 &mut callstack,
-                itrace,
                 data_hazard_policy,
                 control_policy,
                 predict_policy,

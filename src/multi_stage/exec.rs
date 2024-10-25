@@ -1,6 +1,6 @@
 use std::ops::{BitAnd, BitOr, BitXor};
 
-use log::{debug, trace, warn};
+use log::{trace, warn};
 
 use crate::{
     callstack::CallStack, core::insts::{
@@ -64,7 +64,6 @@ pub fn exec(
     let imm = itl_d_e.imm;
     let pc = itl_d_e.pc;
 
-    let ex_branch = itl_d_e.branch_flags.branch;
     let mut pc_src = itl_d_e.branch_flags.pc_src;
     let new_pc_0 = pc.wrapping_add(4);
     let mut new_pc_1 = pc.wrapping_add(4);

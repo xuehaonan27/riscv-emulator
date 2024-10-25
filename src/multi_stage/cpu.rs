@@ -1,4 +1,4 @@
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, warn};
 
 use crate::{
     callstack::CallStack,
@@ -17,7 +17,6 @@ use super::{
     decode::decode,
     exec::exec,
     fetch::fetch,
-    hazard::HazardDetectionUnit,
     mem::mem,
     phases::*,
     writeback::writeback,
@@ -133,9 +132,6 @@ pub struct CPU<'a> {
     // Reference to call stack
     callstack: &'a mut CallStack<'a>,
 
-    // Itrace switch
-    itrace: bool,
-
     // IF / ID
     itl_f_d: InternalFetchDecode,
 
@@ -198,18 +194,12 @@ pub struct CPU<'a> {
 
     // Return address stack
     ras: RAS,
-
-    // HazardResolveUnit
-    hazard_detection_unit: HazardDetectionUnit,
-    // Remaining stall clocks
-    // stall: u8,
 }
 
 impl<'a> CPU<'a> {
     pub fn new(
         vm: &'a mut VirtualMemory,
         callstack: &'a mut CallStack<'a>,
-        itrace: bool,
         data_hazard_policy: DataHazardPolicy,
         control_policy: ControlPolicy,
         predict_policy: Option<PredictPolicy>,
@@ -228,7 +218,7 @@ impl<'a> CPU<'a> {
         } else {
             None
         };
-        let btb = if let Some(predict_policy) = predict_policy {
+        let btb = if let Some(_) = predict_policy {
             Some(BTB::new())
         } else {
             None
@@ -242,7 +232,6 @@ impl<'a> CPU<'a> {
             pc,
             vm,
             callstack,
-            itrace,
             itl_f_d: InternalFetchDecode::default(),
             itl_d_e: InternalDecodeExec::default(),
             itl_e_m: InternalExecMem::default(),
@@ -268,8 +257,6 @@ impl<'a> CPU<'a> {
             bht,
             btb,
             ras: RAS::new(),
-            hazard_detection_unit: HazardDetectionUnit::default(),
-            // stall: 1,
         }
     }
 
@@ -901,6 +888,7 @@ impl<'a> CPU<'a> {
     }
 }
 
+#[allow(unused)]
 fn input() {
     use std::io;
     use std::io::{BufRead, Write};

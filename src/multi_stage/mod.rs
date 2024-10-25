@@ -5,7 +5,6 @@ pub mod debug;
 pub mod decode;
 pub mod exec;
 pub mod fetch;
-pub mod hazard;
 pub mod mem;
 pub mod phases;
 pub mod writeback;

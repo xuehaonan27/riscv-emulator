@@ -1,3 +1,4 @@
+#![allow(unused)]
 use crate::core::insts::Inst64;
 
 #[derive(Debug, Clone, Copy)]

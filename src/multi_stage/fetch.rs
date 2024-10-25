@@ -3,8 +3,7 @@
 //! do `decode` here to get `rs1`, `rs2` (maybe `rs3`) and `rd` immediately
 //! and leave Decode phase just register file reading.
 
-use goblin::pe::debug;
-use log::{debug, error, info, trace};
+use log::{error, trace};
 
 use crate::{
     core::{insts::*, reg::ProgramCounter, vm::VirtualMemory},
@@ -60,6 +59,7 @@ pub fn fetch(
 fn branch_predict(
     mut itl_f_d: InternalFetchDecode,
     control_policy: ControlPolicy,
+    #[allow(unused)]
     pipeline_info: bool,
     bht: &mut BHT,
     btb: &BTB,
