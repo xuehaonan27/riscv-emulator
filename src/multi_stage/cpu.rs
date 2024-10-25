@@ -700,6 +700,28 @@ impl<'a> CPU<'a> {
             PipelineState::Stall => self.itl_f_d,
         };
 
+        // mul/div/rem
+        {
+            use Inst64::*;
+            match new_itl_e_m.alu_op {
+                div | divw | divu | divuw => {
+                    self.clock += 39;
+                }
+                r @ (rem | remw | remu | remuw) => match (r, new_itl_m_w.alu_op) {
+                    (rem, div) | (remw, divw) | (remu, divu) | (remuw, divuw)
+                        if new_itl_e_m.rs1 == new_itl_m_w.rs1
+                            && new_itl_e_m.rs2 == new_itl_m_w.rs2 => {}
+                    _ => {
+                        self.clock += 39;
+                    }
+                },
+                mul | mulh | mulhsu | mulhu | mulw => {
+                    self.clock += 1;
+                }
+                _ => {}
+            }
+        }
+
         // push pipeline forward
         self.itl_m_w = new_itl_m_w;
         self.itl_e_m = new_itl_e_m;
@@ -1057,7 +1079,7 @@ impl<'a> MultistageCPU<'a> {
                 self.last_inst_info.alu_op = d;
                 self.last_inst_info.rs1 = new_itl_e_m.rs1;
                 self.last_inst_info.rs2 = new_itl_e_m.rs2;
-                self.clock += 40;
+                self.clock += 39;
             }
             r @ (rem | remu | remuw | remw) => {
                 match (self.last_inst_info.alu_op, r) {
@@ -1065,7 +1087,7 @@ impl<'a> MultistageCPU<'a> {
                         if self.last_inst_info.rs1 == new_itl_e_m.rs1
                             && self.last_inst_info.rs2 == new_itl_e_m.rs2 => {}
                     _ => {
-                        self.clock += 40;
+                        self.clock += 39;
                     }
                 }
                 self.last_inst_info.clear();
