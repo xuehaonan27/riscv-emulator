@@ -1,0 +1,160 @@
+-------Running ackermann-------
+-------Build Test ackermann-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/ackermann.elf"[0m
+[32m[ INFO] ebreak at 0x800000e8, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x800000e8, with exit code 0[0m
+[32m[ INFO] CPU run clock: 930[0m
+[32m[ INFO] CPU data hazard count: 166[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 29[0m
+[32m[ INFO] CPU control hazard delayed cycles: 58[0m
+[32m[ INFO] CPU executed valid instructions: 871[0m
+[32m[ INFO] CPI = 1.0677382319173363[0m
+-------Running add-------
+-------Build Test add-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/add.elf"[0m
+[32m[ INFO] ebreak at 0x800000f4, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x800000f4, with exit code 0[0m
+[32m[ INFO] CPU run clock: 920[0m
+[32m[ INFO] CPU data hazard count: 281[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 19[0m
+[32m[ INFO] CPU control hazard delayed cycles: 38[0m
+[32m[ INFO] CPU executed valid instructions: 881[0m
+[32m[ INFO] CPI = 1.0442678774120318[0m
+-------Running div-------
+-------Build Test div-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/div.elf"[0m
+[32m[ INFO] ebreak at 0x8000011c, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x8000011c, with exit code 0[0m
+[32m[ INFO] CPU run clock: 4942[0m
+[32m[ INFO] CPU data hazard count: 531[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 36[0m
+[32m[ INFO] CPU control hazard delayed cycles: 72[0m
+[32m[ INFO] CPU executed valid instructions: 869[0m
+[32m[ INFO] CPI = 5.686996547756041[0m
+-------Running dummy-------
+-------Build Test dummy-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/dummy.elf"[0m
+[32m[ INFO] ebreak at 0x80000030, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x80000030, with exit code 0[0m
+[32m[ INFO] CPU run clock: 23[0m
+[32m[ INFO] CPU data hazard count: 2[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 4[0m
+[32m[ INFO] CPU control hazard delayed cycles: 8[0m
+[32m[ INFO] CPU executed valid instructions: 14[0m
+[32m[ INFO] CPI = 1.6428571428571428[0m
+-------Running if-else-------
+-------Build Test if-else-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/if-else.elf"[0m
+[32m[ INFO] ebreak at 0x80000108, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x80000108, with exit code 0[0m
+[32m[ INFO] CPU run clock: 322[0m
+[32m[ INFO] CPU data hazard count: 74[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 14[0m
+[32m[ INFO] CPU control hazard delayed cycles: 28[0m
+[32m[ INFO] CPU executed valid instructions: 293[0m
+[32m[ INFO] CPI = 1.098976109215017[0m
+-------Running load-store-------
+-------Build Test load-store-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/load-store.elf"[0m
+[32m[ INFO] ebreak at 0x80000228, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x80000228, with exit code 0[0m
+[32m[ INFO] CPU run clock: 425[0m
+[32m[ INFO] CPU data hazard count: 151[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 17[0m
+[32m[ INFO] CPU control hazard delayed cycles: 34[0m
+[32m[ INFO] CPU executed valid instructions: 390[0m
+[32m[ INFO] CPI = 1.0897435897435896[0m
+-------Running matrix-mul-------
+-------Build Test matrix-mul-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/matrix-mul.elf"[0m
+[32m[ INFO] ebreak at 0x80000154, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x80000154, with exit code 0[0m
+[32m[ INFO] CPU run clock: 10209[0m
+[32m[ INFO] CPU data hazard count: 1716[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 123[0m
+[32m[ INFO] CPU control hazard delayed cycles: 246[0m
+[32m[ INFO] CPU executed valid instructions: 8962[0m
+[32m[ INFO] CPI = 1.1391430484266905[0m
+-------Running quicksort-------
+-------Build Test quicksort-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/quicksort.elf"[0m
+[32m[ INFO] ebreak at 0x80000214, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x80000214, with exit code 0[0m
+[32m[ INFO] CPU run clock: 3377[0m
+[32m[ INFO] CPU data hazard count: 1168[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 99[0m
+[32m[ INFO] CPU control hazard delayed cycles: 198[0m
+[32m[ INFO] CPU executed valid instructions: 3178[0m
+[32m[ INFO] CPI = 1.0626179987413467[0m
+-------Running shift-------
+-------Build Test shift-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/shift.elf"[0m
+[32m[ INFO] ebreak at 0x8000013c, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x8000013c, with exit code 0[0m
+[32m[ INFO] CPU run clock: 354[0m
+[32m[ INFO] CPU data hazard count: 86[0m
+[32m[ INFO] CPU data hazard delayed cycles: 0[0m
+[32m[ INFO] CPU control hazard count: 14[0m
+[32m[ INFO] CPU control hazard delayed cycles: 28[0m
+[32m[ INFO] CPU executed valid instructions: 325[0m
+[32m[ INFO] CPI = 1.0892307692307692[0m
+-------Running unalign-------
+-------Build Test unalign-------
+make[1]: Nothing to be done for `all'.
+-------Start Simulation-------
+[32m[ INFO] Loading file: "./test/build/unalign.elf"[0m
+[32m[ INFO] ebreak at 0x80000154, code 0[0m
+[32m[ INFO] HIT GOOD TRAP!
+[0m
+[32m[ INFO] Program ended at pc 0x80000154, with exit code 0[0m
+[32m[ INFO] CPU run clock: 214[0m
+[32m[ INFO] CPU data hazard count: 79[0m
+[32m[ INFO] CPU data hazard delayed cycles: 4[0m
+[32m[ INFO] CPU control hazard count: 8[0m
+[32m[ INFO] CPU control hazard delayed cycles: 16[0m
+[32m[ INFO] CPU executed valid instructions: 193[0m
+[32m[ INFO] CPI = 1.1088082901554404[0m
