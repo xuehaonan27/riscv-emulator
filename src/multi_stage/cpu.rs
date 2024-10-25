@@ -96,6 +96,7 @@ pub struct CPUStatistics {
     control_hazard_count: u64,
     data_hazard_delayed_cycles: u64,
     control_hazard_delayed_cycles: u64,
+    executed_inst_count: u64,
 }
 
 impl Default for CPUStatistics {
@@ -105,6 +106,7 @@ impl Default for CPUStatistics {
             control_hazard_count: 0,
             data_hazard_delayed_cycles: 0,
             control_hazard_delayed_cycles: 0,
+            executed_inst_count: 0,
         }
     }
 }
@@ -326,6 +328,15 @@ impl<'a> CPU<'a> {
             "CPU control hazard delayed cycles: {}",
             self.cpu_statistics.control_hazard_delayed_cycles
         );
+        info!(
+            "CPU executed valid instructions: {}",
+            self.cpu_statistics.executed_inst_count
+        );
+        info!("CPI = {}", {
+            let cycles = self.clock;
+            let insts = self.cpu_statistics.executed_inst_count;
+            (cycles as f64) / (insts as f64)
+        });
     }
 
     pub(super) fn clock(&mut self) -> Result<()> {
@@ -722,6 +733,11 @@ impl<'a> CPU<'a> {
             }
         }
 
+        // whether executed a non-noop instruction
+        if new_itl_e_m.alu_op != Inst64::noop {
+            self.cpu_statistics.executed_inst_count += 1;
+        }
+
         // push pipeline forward
         self.itl_m_w = new_itl_m_w;
         self.itl_e_m = new_itl_e_m;
@@ -1048,6 +1064,15 @@ impl<'a> MultistageCPU<'a> {
             "CPU control hazard delayed cycles: {}",
             self.cpu_statistics.control_hazard_delayed_cycles
         );
+        info!(
+            "CPU executed valid instructions: {}",
+            self.cpu_statistics.executed_inst_count
+        );
+        info!("CPI = {}", {
+            let cycles = self.clock;
+            let insts = self.cpu_statistics.executed_inst_count;
+            (cycles as f64) / (insts as f64)
+        });
     }
 
     pub(super) fn exec_once(&mut self) -> Result<()> {
@@ -1099,6 +1124,10 @@ impl<'a> MultistageCPU<'a> {
             _ => {
                 self.last_inst_info.clear();
             }
+        }
+        // whether executed a non-noop instruction
+        if new_itl_e_m.alu_op != Inst64::noop {
+            self.cpu_statistics.executed_inst_count += 1;
         }
 
         let new_itl_m_w = mem(&self.itl_e_m, &mut self.vm, self.itrace);
