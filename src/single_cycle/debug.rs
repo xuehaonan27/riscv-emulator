@@ -51,7 +51,7 @@ enum Commands {
 }
 
 impl<'a> REDB<'a> {
-    pub fn new(cpu: &'a mut CPU<'a>) -> REDB {
+    pub fn new(cpu: &'a mut CPU<'a>) -> REDB<'a> {
         REDB {
             buf: String::with_capacity(REDB_BUF_SIZE),
             cpu,
