@@ -25,52 +25,64 @@ pub const IMM110_SHIFT: usize = 20;
 pub const IMMHIGH_SHIFT: usize = 12;
 pub const SHIFT64_SHIFT: usize = 20;
 
+/// Extract `opcode` field from the instruction.
 pub fn opcode(inst: u32) -> u32 {
     inst & OPCODE_MASK
 }
 
+/// Extract `rd` field from the instruction.
 pub fn rd(inst: u32) -> u8 {
     ((inst & RD_MASK) >> RD_SHIFT) as u8
 }
 
+/// Extract `rs1` field from the instruction.
 pub fn rs1(inst: u32) -> u8 {
     ((inst & RS1_MASK) >> RS1_SHIFT) as u8
 }
 
+/// Extract `rs2` field from the instruction.
 pub fn rs2(inst: u32) -> u8 {
     ((inst & RS2_MASK) >> RS2_SHIFT) as u8
 }
 
+/// Extract `rs3` field from the instruction.
 pub fn rs3(inst: u32) -> u8 {
     ((inst & RS3_MASK) >> RS3_SHIFT) as u8
 }
 
+/// Extract `funct3` field from the instruction.
 pub fn funct3(inst: u32) -> u8 {
     ((inst & FUNCT3_MASK) >> FUNCT3_SHIFT) as u8
 }
 
+/// Extract `funct7` field from the instruction.
 pub fn funct7(inst: u32) -> u8 {
     ((inst & FUNCT7_MASK) >> FUNCT7_SHIFT) as u8
 }
 
+/// Extract `funct2` field from the instruction.
 pub fn funct2(inst: u32) -> u8 {
     ((inst & FUNCT2_MASK) >> FUNCT2_SHIFT) as u8
 }
 
+/// Extract `funct6` field from the instruction.
 pub fn funct6(inst: u32) -> u8 {
     ((inst & FUNCT6_MASK) >> FUNCT6_SHIFT) as u8
 }
 
+/// Extract `shamt` field from the instruction (RV64).
 #[allow(non_snake_case)]
 pub fn shift64_I(inst: u32) -> u64 {
     ((inst & SHIFT64_MASK) >> SHIFT64_SHIFT) as u64
 }
 
+/// Extract `imm` field from I type instruction.
 #[allow(non_snake_case)]
 pub fn imm_I(inst: u32) -> u64 {
     ((inst & IMM110_MASK) >> IMM110_SHIFT) as u64
 }
 
+/// Extract `imm` field from S type instruction.
 #[allow(non_snake_case)]
 pub fn imm_S(inst: u32) -> u64 {
     let imm_11_5 = ((inst & FUNCT7_MASK) >> FUNCT7_SHIFT) << 5;
@@ -78,6 +90,7 @@ pub fn imm_S(inst: u32) -> u64 {
     (imm_11_5 | imm_4_0) as u64
 }
 
+/// Extract `imm` field from SB type instruction.
 #[allow(non_snake_case)]
 pub fn imm_SB(inst: u32) -> u64 {
     let imm_12_10_5 = (inst & FUNCT7_MASK) >> FUNCT7_SHIFT;
@@ -92,11 +105,13 @@ pub fn imm_SB(inst: u32) -> u64 {
     (bit_12 | bit_11 | imm_10_5 | imm_4_1) as u64
 }
 
+/// Extract `imm` field from U type instruction.
 #[allow(non_snake_case)]
 pub fn imm_U(inst: u32) -> u64 {
     ((inst & IMMHIGH_MASK) >> IMMHIGH_SHIFT) as u64
 }
 
+/// Extract `imm` field from UJ type instruction.
 #[allow(non_snake_case)]
 pub fn imm_UJ(inst: u32) -> u64 {
     let imm_20_10_1_11 = inst & (FUNCT7_MASK | RS2_MASK);
@@ -261,7 +276,7 @@ macro_rules! pinst {
             "{:8x}:\t{}\t{}",
             $pc,
             stringify!($inst),
-            REGNAME[$t1 as usize]
+            crate::core::reg::REGNAME[$t1 as usize]
         )
     };
     ($pc:ident, $inst:tt, $t1:ident, $t2:ident) => {
@@ -269,8 +284,8 @@ macro_rules! pinst {
             "{:8x}:\t{}\t{},{}",
             $pc,
             stringify!($inst),
-            REGNAME[$t1 as usize],
-            REGNAME[$t2 as usize]
+            crate::core::reg::REGNAME[$t1 as usize],
+            crate::core::reg::REGNAME[$t2 as usize]
         )
     };
     // OP, OP_32
@@ -279,9 +294,9 @@ macro_rules! pinst {
             "{:8x}:\t{}\t{},{},{}",
             $pc,
             stringify!($inst),
-            REGNAME[$rd as usize],
-            REGNAME[$rs1 as usize],
-            REGNAME[$rs2 as usize]
+            crate::core::reg::REGNAME[$rd as usize],
+            crate::core::reg::REGNAME[$rs1 as usize],
+            crate::core::reg::REGNAME[$rs2 as usize]
         )
     };
     // BRANCH
@@ -290,8 +305,8 @@ macro_rules! pinst {
             "{:8x}:\t{}\t{},{},{:x}",
             $pc,
             stringify!($inst),
-            REGNAME[$rs1 as usize],
-            REGNAME[$rs2 as usize],
+            crate::core::reg::REGNAME[$rs1 as usize],
+            crate::core::reg::REGNAME[$rs2 as usize],
             $offset
         )
     };
@@ -301,7 +316,7 @@ macro_rules! pinst {
             "{:8x}:\t{}\t{},{:x}",
             $pc,
             stringify!($inst),
-            REGNAME[$rd as usize],
+            crate::core::reg::REGNAME[$rd as usize],
             $offset
         )
     };
@@ -311,7 +326,7 @@ macro_rules! pinst {
             "{:8x}:\t{}\t{},{:#x}",
             $pc,
             stringify!($inst),
-            REGNAME[$t1 as usize],
+            crate::core::reg::REGNAME[$t1 as usize],
             $imm
         )
     };
@@ -321,8 +336,8 @@ macro_rules! pinst {
             "{:8x}:\t{}\t{},{},{}",
             $pc,
             stringify!($inst),
-            REGNAME[$t1 as usize],
-            REGNAME[$t2 as usize],
+            crate::core::reg::REGNAME[$t1 as usize],
+            crate::core::reg::REGNAME[$t2 as usize],
             $imm
         )
     };
@@ -332,9 +347,9 @@ macro_rules! pinst {
             "{:8x}:\t{}\t{},{}({})",
             $pc,
             stringify!($inst),
-            REGNAME[$t1 as usize],
+            crate::core::reg::REGNAME[$t1 as usize],
             $imm,
-            REGNAME[$t2 as usize],
+            crate::core::reg::REGNAME[$t2 as usize],
         )
     };
 }

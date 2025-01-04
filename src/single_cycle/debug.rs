@@ -1,6 +1,6 @@
 use super::cpu::CPU;
 use crate::{
-    core::utils::reg_name_by_id,
+    core::reg::REGNAME,
     error::{Error, Result},
 };
 use clap::{Parser, Subcommand};
@@ -107,13 +107,7 @@ impl<'a> REDB<'a> {
                         for i in 0..32 {
                             let reg_name = format!("x{i}");
                             let reg = self.cpu.reg_val_by_name(&reg_name).unwrap();
-                            println!(
-                                "{} ({}) \t: {}\t{:#x}",
-                                reg_name,
-                                reg_name_by_id(i),
-                                reg,
-                                reg
-                            );
+                            println!("{} ({}) \t: {}\t{:#x}", reg_name, REGNAME[i], reg, reg);
                         }
                         let pc = self.cpu.pc();
                         println!("{}\t\t: {}\t{:#x}", "pc", pc, pc);

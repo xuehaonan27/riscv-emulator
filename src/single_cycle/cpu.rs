@@ -12,7 +12,7 @@ use crate::{
     check,
     core::{
         insts::*,
-        reg::{ProgramCounter, RegisterFile, REGNAME},
+        reg::{ProgramCounter, RegisterFile},
         vm::VirtualMemory,
     },
     elf::LoadElfInfo,

@@ -4,8 +4,7 @@ use crate::{
     callstack::CallStack,
     core::{
         insts::Inst64,
-        reg::{ProgramCounter, RegisterFile},
-        utils::reg_name_by_id,
+        reg::{ProgramCounter, RegisterFile, REGNAME},
         vm::VirtualMemory,
     },
     elf::LoadElfInfo,
@@ -349,18 +348,15 @@ impl<'a> CPU<'a> {
                     warn!("Load-use hazard detected.");
                     warn!(
                         "  IF/ID.rs1={}({})",
-                        self.itl_d_e.rd,
-                        reg_name_by_id(self.itl_d_e.rd)
+                        self.itl_d_e.rd, REGNAME[self.itl_d_e.rd as usize],
                     );
                     warn!(
                         "  ID/EX.rd={}({})",
-                        self.itl_f_d.rs1,
-                        reg_name_by_id(self.itl_f_d.rs1)
+                        self.itl_f_d.rs1, REGNAME[self.itl_f_d.rs1 as usize]
                     );
                     warn!(
                         "  IF/ID.rs2={}({})",
-                        self.itl_f_d.rs2,
-                        reg_name_by_id(self.itl_f_d.rs2)
+                        self.itl_f_d.rs2, REGNAME[self.itl_f_d.rs2 as usize]
                     );
                     warn!("  Stall 1 cycle");
                 }
@@ -415,9 +411,9 @@ impl<'a> CPU<'a> {
                             warn!(
                                 "  MEM/WB.rd={}({}) to EXEC/MEM.rs2={}({})",
                                 mem_wb_rd,
-                                reg_name_by_id(mem_wb_rd),
+                                REGNAME[mem_wb_rd as usize],
                                 exec_mem_rs2,
-                                reg_name_by_id(exec_mem_rs2)
+                                REGNAME[exec_mem_rs2 as usize]
                             );
                         }
                         self.cpu_statistics.data_hazard_count += 1;
@@ -463,8 +459,8 @@ impl<'a> CPU<'a> {
                     if ex_mem_reg_write && (ex_mem_rd != 0) && (ex_mem_rd == id_ex_rs1) {
                         if self.data_hazard_info {
                             warn!("EX/MEM data hazard detected, for ALU SRC A");
-                            warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
-                            warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                            warn!("  EX/MEM.rd={}({})", ex_mem_rd, REGNAME[ex_mem_rd as usize]);
+                            warn!("  ID/EX.rs1={}({})", id_ex_rs1, REGNAME[id_ex_rs1 as usize]);
                         }
                         // forward A from EX/MEM
                         self.itl_d_e.forward_a = 0b10;
@@ -472,8 +468,8 @@ impl<'a> CPU<'a> {
                     if ex_mem_reg_write && (ex_mem_rd != 0) && (ex_mem_rd == id_ex_rs2) {
                         if self.data_hazard_info {
                             warn!("EX/MEM data hazard detected, for ALU SRC B");
-                            warn!("  EX/MEM.rd={}({})", ex_mem_rd, reg_name_by_id(ex_mem_rd));
-                            warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                            warn!("  EX/MEM.rd={}({})", ex_mem_rd, REGNAME[ex_mem_rd as usize]);
+                            warn!("  ID/EX.rs1={}({})", id_ex_rs2, REGNAME[id_ex_rs2 as usize]);
                         }
                         // forward B from EX/MEM
                         self.itl_d_e.forward_b = 0b10;
@@ -530,8 +526,8 @@ impl<'a> CPU<'a> {
                     {
                         if self.data_hazard_info {
                             warn!("MEM/WB data hazard detected, for ALU SRC A");
-                            warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
-                            warn!("  ID/EX.rs1={}({})", id_ex_rs1, reg_name_by_id(id_ex_rs1));
+                            warn!("  MEM/WB.rd={}({})", mem_wb_rd, REGNAME[mem_wb_rd as usize]);
+                            warn!("  ID/EX.rs1={}({})", id_ex_rs1, REGNAME[id_ex_rs1 as usize]);
                         }
                         // forward A from MEM/WB
                         assert_eq!(self.itl_d_e.forward_a, 0);
@@ -544,8 +540,8 @@ impl<'a> CPU<'a> {
                     {
                         if self.data_hazard_info {
                             warn!("MEM/WB data hazard detected, for ALU SRC B");
-                            warn!("  MEM/WB.rd={}({})", mem_wb_rd, reg_name_by_id(mem_wb_rd));
-                            warn!("  ID/EX.rs1={}({})", id_ex_rs2, reg_name_by_id(id_ex_rs2));
+                            warn!("  MEM/WB.rd={}({})", mem_wb_rd, REGNAME[mem_wb_rd as usize]);
+                            warn!("  ID/EX.rs1={}({})", id_ex_rs2, REGNAME[id_ex_rs2 as usize]);
                         }
                         // forward B from MEM/WB
                         assert_eq!(self.itl_d_e.forward_b, 0);

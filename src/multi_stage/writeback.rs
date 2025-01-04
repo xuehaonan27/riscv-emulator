@@ -1,7 +1,10 @@
 use log::{debug, info, trace};
 
 use crate::{
-    core::{insts::Inst64, reg::RegisterFile, utils::reg_name_by_id},
+    core::{
+        insts::Inst64,
+        reg::{RegisterFile, REGNAME},
+    },
     multi_stage::{cpu::halt, debug::w_pinst},
 };
 
@@ -22,9 +25,7 @@ pub fn writeback(
         if pipeline_info {
             debug!(
                 "WB : {:#x} -> REG[{}]({})",
-                write_val,
-                itl_m_w.rd,
-                reg_name_by_id(itl_m_w.rd)
+                write_val, itl_m_w.rd, REGNAME[itl_m_w.rd as usize]
             )
         };
         reg_file.write(itl_m_w.rd, write_val);

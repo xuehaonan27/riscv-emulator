@@ -1,6 +1,6 @@
 use super::cpu::CPU;
 use super::phases::{InternalDecodeExec, InternalExecMem, InternalFetchDecode, InternalMemWb};
-use crate::core::{insts::Inst64, reg::REGNAME, utils::reg_name_by_id};
+use crate::core::{insts::Inst64, reg::REGNAME};
 use crate::{
     error::{Error, Result},
     pinst,
@@ -225,13 +225,7 @@ impl<'a> REDB<'a> {
                         for i in 0..32 {
                             let reg_name = format!("x{i}");
                             let reg = self.cpu.reg_val_by_name(&reg_name).unwrap();
-                            println!(
-                                "{} ({}) \t: {}\t{:#x}",
-                                reg_name,
-                                reg_name_by_id(i),
-                                reg,
-                                reg
-                            );
+                            println!("{} ({}) \t: {}\t{:#x}", reg_name, REGNAME[i], reg, reg);
                         }
                         let pc = self.cpu.pc();
                         println!("{}\t\t: {}\t{:#x}", "pc", pc, pc);
